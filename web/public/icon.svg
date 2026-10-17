@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  <rect x="72" y="104" width="232" height="168" rx="40" fill="#22c55e"/>
+  <path d="M120 272 L120 330 L178 272 Z" fill="#22c55e"/>
+  <rect x="208" y="232" width="232" height="168" rx="40" fill="#ef4444"/>
+  <path d="M392 400 L392 458 L334 400 Z" fill="#ef4444"/>
+  <text x="188" y="212" font-family="Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#fff" text-anchor="middle">IT</text>
+  <text x="324" y="348" font-family="PingFang SC, sans-serif" font-size="96" font-weight="700" fill="#fff" text-anchor="middle">中</text>
+</svg>
