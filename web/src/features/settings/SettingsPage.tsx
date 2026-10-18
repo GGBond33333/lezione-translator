@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ModelPicker } from "../../components/ModelPicker";
-import { loadOfflineModels } from "../../core/mlClient";
+import { loadOfflineModels, type DownloadProgress } from "../../core/mlClient";
 import { updateSettings, useSettings, type NetMode } from "../../core/settings";
 import { deleteCourse, listCourses, newId, saveCourse, type Course } from "../../storage/db";
 import type { GlossaryEntry } from "../../core/translator";
@@ -20,17 +20,19 @@ export function parseGlossaryText(text: string): GlossaryEntry[] {
 export function SettingsPage() {
   const s = useSettings();
   const [showKey, setShowKey] = useState(false);
-  const [dl, setDl] = useState<{ fraction: number; file: string } | null>(null);
+  const [dl, setDl] = useState<DownloadProgress | null>(null);
   const [dlError, setDlError] = useState("");
 
   async function download() {
     setDlError("");
-    setDl({ fraction: 0, file: "" });
+    setDl({ step: 0, steps: 5, label: "准备中", stepFraction: 0, overall: 0 });
     try {
-      await loadOfflineModels((fraction, file) => setDl({ fraction, file }));
+      await loadOfflineModels(setDl);
       updateSettings({ offlineReady: true });
     } catch (e) {
-      setDlError(`下载失败：${e instanceof Error ? e.message : e}`);
+      setDlError(
+        `下载失败：${e instanceof Error ? e.message : e}。再点一次"下载离线模型"会从断点继续，已下载的部分不会重新下载。`,
+      );
     } finally {
       setDl(null);
     }
@@ -85,6 +87,30 @@ export function SettingsPage() {
       <h2>课后精修默认模型</h2>
       <ModelPicker kind="refine" value={s.refineModel} onChange={(v) => updateSettings({ refineModel: v })} />
 
+      <h2>双语对话模型</h2>
+      <ModelPicker kind="conversation" value={s.conversationModel} onChange={(v) => updateSettings({ conversationModel: v })} />
+
+      <h2>对话记录保存时间</h2>
+      <div className="seg">
+        {(
+          [
+            [7, "7 天"],
+            [30, "30 天"],
+            [90, "90 天"],
+            [0, "永久"],
+          ] as [number, string][]
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            className={s.conversationRetentionDays === v ? "on" : ""}
+            onClick={() => updateSettings({ conversationRetentionDays: v })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="muted small">对话记录只保存在这台手机上，超过时间后自动删除。课堂记录不会自动删除。</p>
+
       <h2>费用上限</h2>
       <div className="card">
         <label className="field">
@@ -124,10 +150,13 @@ export function SettingsPage() {
         {dl ? (
           <>
             <div className="progress">
-              <div style={{ width: `${Math.round(dl.fraction * 100)}%` }} />
+              <div style={{ width: `${Math.round(dl.overall * 100)}%` }} />
             </div>
             <p className="muted small">
-              {Math.round(dl.fraction * 100)}% · {dl.file.split("/").slice(-2).join("/")}
+              总进度 {Math.round(dl.overall * 100)}% · 第 {dl.step + 1}/{dl.steps} 步：{dl.label}{" "}
+              {Math.round(dl.stepFraction * 100)}%
+              <br />
+              下载期间请保持页面打开、屏幕亮着。
             </p>
           </>
         ) : (

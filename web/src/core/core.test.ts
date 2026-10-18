@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Utterance } from "../storage/db";
 import { chunkForRefine, toMarkdown } from "./export";
-import { estimateLivePerHour, estimateRefine, usageCost } from "./models-catalog";
+import { estimateConversation, estimateLivePerHour, estimateRefine, usageCost } from "./models-catalog";
 import { OpusMtTranslator, pivotPairs } from "./opusMtTranslator";
-import { liveUserMessage, parseGlossaryJson, parseTagged, stripGlossaryJson } from "./prompts";
+import {
+  CONTEXT_MAX_TURNS,
+  conversationUserMessage,
+  liveUserMessage,
+  parseGlossaryJson,
+  parseTagged,
+  pickContext,
+  stripGlossaryJson,
+} from "./prompts";
 import { chooseRecognizer, chooseTranslator, type RouteInput } from "./router";
 import { TranslationQueue, type QueueDeps } from "./translationQueue";
 import type { Translator } from "./translator";
@@ -59,6 +67,42 @@ describe("提示词与解析", () => {
     expect(parseGlossaryJson(notes)).toEqual([{ source: "Monteverdi", target: "蒙特威尔第" }]);
     expect(stripGlossaryJson(notes)).toBe("## 要点\n- x");
     expect(parseGlossaryJson("没有 JSON")).toEqual([]);
+  });
+});
+
+describe("双语对话", () => {
+  const turn = (i: number, from: "zh" | "it" = "zh") => ({ from, source: `原文${i}`, translation: `traduzione ${i}` });
+
+  it("对话每 100 句的预估费用", () => {
+    expect(estimateConversation("offline")).toBe(0);
+    expect(estimateConversation("claude-haiku-5-5")).toBeCloseTo(0.015, 4);
+    expect(estimateConversation("claude-sonnet-5-5")).toBeCloseTo(0.24, 4);
+    expect(estimateConversation("claude-opus-5-5")).toBeCloseTo(0.6, 4);
+  });
+
+  it("翻译时附带最近 12 句前文，跳过翻译失败的句子", () => {
+    const history = Array.from({ length: 20 }, (_, i) => turn(i));
+    history[19] = { ...history[19], translation: "" };
+    const ctx = pickContext(history);
+    expect(ctx.length).toBe(CONTEXT_MAX_TURNS);
+    expect(ctx[0].source).toBe("原文7");
+    expect(ctx[ctx.length - 1].source).toBe("原文18");
+  });
+
+  it("前文太长时只保留最近的部分", () => {
+    const long = { from: "it" as const, source: "x".repeat(2000), translation: "y".repeat(2000) };
+    expect(pickContext([turn(1), long, turn(2)]).map((t) => t.source)).toEqual(["原文2"]);
+    // 最近一句本身很长时仍然保留
+    expect(pickContext([turn(1), long]).map((t) => t.source)).toEqual([long.source]);
+  });
+
+  it("用户消息包含前文和要翻译的句子", () => {
+    const msg = conversationUserMessage("Dove devo firmare?", "it", "zh", [turn(1), turn(2, "it")]);
+    expect(msg).toContain("Conversation so far");
+    expect(msg).toContain("[中文] 原文1\n  → traduzione 1");
+    expect(msg).toContain("[Italiano] 原文2");
+    expect(msg.endsWith("Translate this Italian utterance into Simplified Chinese:\nDove devo firmare?")).toBe(true);
+    expect(conversationUserMessage("你好", "zh", "it", [])).toBe("Translate this Simplified Chinese utterance into Italian:\n你好");
   });
 });
 

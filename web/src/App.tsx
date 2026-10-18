@@ -25,6 +25,12 @@ export function App() {
     setTab("history");
   }, []);
   const clearOpen = useCallback(() => setOpenId(null), []);
+  const [resumeConvoId, setResumeConvoId] = useState<string | null>(null);
+  const continueConversation = useCallback((id: string) => {
+    setResumeConvoId(id);
+    setTab("conversation");
+  }, []);
+  const clearResume = useCallback(() => setResumeConvoId(null), []);
 
   return (
     <div className="app">
@@ -38,10 +44,12 @@ export function App() {
       </div>
       <div style={{ display: tab === "conversation" ? "contents" : "none" }}>
         <div className="page fill" style={{ padding: 0 }}>
-          <ConversationPage />
+          <ConversationPage resumeId={resumeConvoId} onResumed={clearResume} />
         </div>
       </div>
-      {tab === "history" && <HistoryPage openId={openId} onClearOpen={clearOpen} />}
+      {tab === "history" && (
+        <HistoryPage openId={openId} onClearOpen={clearOpen} onContinueConversation={continueConversation} />
+      )}
       {tab === "settings" && <SettingsPage />}
       <nav className="tabbar">
         {TABS.map((t) => (

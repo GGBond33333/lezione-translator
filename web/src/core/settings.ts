@@ -8,6 +8,10 @@ export interface Settings {
   mode: NetMode;
   liveModel: LiveModelChoice;
   refineModel: OnlineModelId;
+  /** 双语对话单独选择的翻译模型 */
+  conversationModel: LiveModelChoice;
+  /** 对话记录保存天数，0 表示永久 */
+  conversationRetentionDays: number;
   /** 单节课费用上限（美元），0 表示不限 */
   costCapUsd: number;
   audioBackup: boolean;
@@ -20,6 +24,8 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: "auto",
   liveModel: "claude-haiku-5-5",
   refineModel: "claude-sonnet-5-5",
+  conversationModel: "claude-haiku-5-5",
+  conversationRetentionDays: 30,
   costCapUsd: 3,
   audioBackup: true,
   offlineReady: false,

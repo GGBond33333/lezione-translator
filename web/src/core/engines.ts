@@ -1,7 +1,7 @@
 // 根据当前设置和网络状态组装识别器、翻译器
 import { ClaudeTranslator } from "./claudeTranslator";
 import { translatePair } from "./mlClient";
-import type { OnlineModelId } from "./models-catalog";
+import type { LiveModelChoice, OnlineModelId } from "./models-catalog";
 import { isOnline } from "./network";
 import { OpusMtTranslator } from "./opusMtTranslator";
 import type { Recognizer } from "./recognizer";
@@ -32,7 +32,8 @@ export function offline(): Translator | null {
   return offlineTranslator;
 }
 
-export function currentTranslatorRoute(spentUsd: number): TranslatorRoute {
+/** model 默认用课堂转写的实时模型；双语对话传入自己的模型 */
+export function currentTranslatorRoute(spentUsd: number, model?: LiveModelChoice): TranslatorRoute {
   const s = getSettings();
   return chooseTranslator({
     mode: s.mode,
@@ -40,7 +41,7 @@ export function currentTranslatorRoute(spentUsd: number): TranslatorRoute {
     hasApiKey: !!s.apiKey.trim(),
     offlineReady: s.offlineReady,
     webSpeech: webSpeechSupported(),
-    liveModel: s.liveModel,
+    liveModel: model ?? s.liveModel,
     spentUsd,
     capUsd: s.costCapUsd,
   });

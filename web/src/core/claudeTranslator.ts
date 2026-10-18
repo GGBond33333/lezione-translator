@@ -1,7 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS, usageCost, type OnlineModelId } from "./models-catalog";
+import type { Lang } from "./languages";
 import {
+  conversationSystemPrompt,
+  conversationUserMessage,
   liveSystemPrompt,
+  type ConversationTurn,
   liveUserMessage,
   notesSystemPrompt,
   parseTagged,
@@ -62,6 +66,22 @@ export class ClaudeTranslator implements Translator {
     });
     return {
       translations: parseTagged(textOf(msg), sentences.length),
+      costUsd: usageCost(msg.model, msg.usage),
+      engine: this.engine,
+    };
+  }
+
+  /** 双语对话：翻译一句话，附带前文聊天记录作为上下文 */
+  async translateTurn(text: string, from: Lang, to: Lang, history: ConversationTurn[]): Promise<TranslateResult> {
+    const msg = await this.client.beta.messages.create({
+      model: this.model,
+      max_tokens: 2000,
+      system: [{ type: "text", text: conversationSystemPrompt(), cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: conversationUserMessage(text, from, to, history) }],
+      ...liveParams(this.model),
+    });
+    return {
+      translations: [textOf(msg).trim()],
       costUsd: usageCost(msg.model, msg.usage),
       engine: this.engine,
     };

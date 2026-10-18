@@ -1,17 +1,27 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ModelPicker, Sheet } from "../../components/ModelPicker";
 import { describeApiError } from "../../core/claudeTranslator";
 import { speak, unlockSpeech } from "../../core/device";
 import { claudeTranslator, createRecognizer, currentTranslatorRoute, offline } from "../../core/engines";
 import { other, type Lang } from "../../core/languages";
-import { formatUsd } from "../../core/models-catalog";
+import { formatUsd, MODELS } from "../../core/models-catalog";
+import type { ConversationTurn } from "../../core/prompts";
 import type { Recognizer } from "../../core/recognizer";
-import { newId, saveSession, saveUtterance, type Session } from "../../storage/db";
+import { updateSettings, useSettings } from "../../core/settings";
+import {
+  getSession,
+  listConversations,
+  listUtterances,
+  newId,
+  purgeOldConversations,
+  saveSession,
+  saveUtterance,
+  type Session,
+} from "../../storage/db";
 
-interface Msg {
+interface Msg extends ConversationTurn {
   id: number;
-  from: Lang;
-  source: string;
-  translation: string;
+  at: number;
 }
 
 const TEXT = {
@@ -24,18 +34,71 @@ const TEXT = {
   },
 };
 
-export function ConversationPage() {
+function time(ts: number) {
+  return new Date(ts).toTimeString().slice(0, 5);
+}
+
+export function ConversationPage({ resumeId, onResumed }: { resumeId: string | null; onResumed(): void }) {
+  const settings = useSettings();
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [session, setSession] = useState<Session | null>(null);
   const [talking, setTalking] = useState<Lang | null>(null);
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState("");
   const [notice, setNotice] = useState("");
   const [faceToFace, setFaceToFace] = useState(true);
-  const [cost, setCost] = useState(0);
+  const [sheet, setSheet] = useState<"model" | "record" | null>(null);
+  const [past, setPast] = useState<Session[]>([]);
   const recRef = useRef<Recognizer | null>(null);
   const finals = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
+  const msgsRef = useRef<Msg[]>([]);
   const seq = useRef(0);
+
+  const model = settings.conversationModel;
+  const cost = session?.costUsd ?? 0;
+
+  function setAll(list: Msg[]) {
+    msgsRef.current = list;
+    setMsgs(list);
+  }
+
+  function startNew() {
+    sessionRef.current = null;
+    setSession(null);
+    setAll([]);
+    seq.current = 0;
+    setNotice("");
+  }
+
+  /** 继续一段以前的对话：载入完整记录，之后翻译会参考这些前文 */
+  async function resume(id: string) {
+    const s = await getSession(id);
+    if (!s) return;
+    const list = await listUtterances(id);
+    sessionRef.current = s;
+    setSession(s);
+    setAll(
+      list.map((u) => ({ id: u.seq, from: u.lang, source: u.source, translation: u.translation ?? "", at: u.at })),
+    );
+    seq.current = list.reduce((m, u) => Math.max(m, u.seq + 1), 0);
+    setSheet(null);
+    setNotice("");
+  }
+
+  useEffect(() => {
+    if (resumeId) {
+      void resume(resumeId);
+      onResumed();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId]);
+
+  async function openRecord() {
+    await purgeOldConversations(settings.conversationRetentionDays);
+    setPast((await listConversations()).filter((s) => s.id !== sessionRef.current?.id));
+    setSheet("record");
+  }
 
   async function down(lang: Lang) {
     if (talking || busy) return;
@@ -82,19 +145,20 @@ export function ConversationPage() {
 
   async function translateAndShow(from: Lang, text: string) {
     const to = other(from);
-    const route = currentTranslatorRoute(cost);
+    const route = currentTranslatorRoute(sessionRef.current?.costUsd ?? 0, model);
+    const history: ConversationTurn[] = msgsRef.current;
     let translation = "";
     let engine = "";
     let usd = 0;
-    const ctx = { from, to };
     try {
       if (route.engine === "claude") {
-        const r = await claudeTranslator(route.model).translate([text], ctx);
+        const r = await claudeTranslator(route.model).translateTurn(text, from, to, history);
         translation = r.translations[0];
         engine = r.engine;
         usd = r.costUsd;
+        if (route.downgraded) setNotice("已超过费用上限，已自动切换到 Haiku");
       } else if (route.engine === "offline") {
-        const r = await offline()!.translate([text], ctx);
+        const r = await offline()!.translate([text], { from, to });
         translation = r.translations[0];
         engine = r.engine;
       } else {
@@ -105,7 +169,7 @@ export function ConversationPage() {
       const off = route.engine === "claude" ? offline() : null;
       if (off) {
         try {
-          const r = await off.translate([text], ctx);
+          const r = await off.translate([text], { from, to });
           translation = r.translations[0];
           engine = r.engine;
           setNotice("联网翻译失败，已用离线模型翻译");
@@ -115,12 +179,11 @@ export function ConversationPage() {
       }
     }
 
-    const msg: Msg = { id: seq.current++, from, source: text, translation: translation || "（翻译失败）" };
-    setMsgs((m) => [...m.slice(-20), msg]);
+    const msg: Msg = { id: seq.current++, from, source: text, translation, at: Date.now() };
+    setAll([...msgsRef.current, msg]);
     if (translation) speak(translation, to);
-    setCost((c) => c + usd);
 
-    // 保存到历史
+    // 每句话都立即保存，作为对话记录和下次翻译的前文
     if (!sessionRef.current) {
       const now = new Date();
       sessionRef.current = {
@@ -132,9 +195,9 @@ export function ConversationPage() {
         costUsd: 0,
       };
     }
-    const s = sessionRef.current;
-    s.costUsd += usd;
-    s.endedAt = Date.now();
+    const s = { ...sessionRef.current, costUsd: sessionRef.current.costUsd + usd, endedAt: Date.now() };
+    sessionRef.current = s;
+    setSession(s);
     await saveSession(s);
     await saveUtterance({
       sessionId: s.id,
@@ -144,7 +207,7 @@ export function ConversationPage() {
       translation,
       engine,
       status: translation ? "done" : "failed",
-      at: Date.now(),
+      at: msg.at,
     });
   }
 
@@ -165,7 +228,7 @@ export function ConversationPage() {
               </div>
             ) : (
               <div key={m.id} className="bubble theirs">
-                {m.translation}
+                {m.translation || "（翻译失败）"}
                 <span className="orig">{m.source}</span>
               </div>
             ),
@@ -189,23 +252,24 @@ export function ConversationPage() {
     );
   }
 
+  const retention = settings.conversationRetentionDays;
+
   return (
     <div className="convo" style={{ paddingTop: "env(safe-area-inset-top)" }}>
       {half("it")}
-      <div className="row" style={{ padding: "6px 16px", background: "#0b1222" }}>
-        <button className="chip" onClick={() => setFaceToFace((v) => !v)}>
-          {faceToFace ? "面对面（上半屏倒置）" : "同向显示"}
+      <div className="row" style={{ padding: "6px 16px", background: "#0b1222", gap: 6 }}>
+        <button className="chip blue" onClick={() => setSheet("model")}>
+          {model === "offline" ? "离线" : MODELS[model].name.replace("Claude ", "")}
         </button>
-        <span className="chip">本次 {formatUsd(cost)}</span>
+        <button className="chip" onClick={openRecord}>
+          📜 记录{msgs.length ? ` ${msgs.length}` : ""}
+        </button>
+        <button className="chip" onClick={() => setFaceToFace((v) => !v)}>
+          {faceToFace ? "面对面" : "同向"}
+        </button>
+        <span className="chip">{formatUsd(cost)}</span>
         <span className="spacer" />
-        <button
-          className="chip"
-          onClick={() => {
-            setMsgs([]);
-            sessionRef.current = null;
-            setCost(0);
-          }}
-        >
+        <button className="chip" onClick={startNew}>
           新对话
         </button>
       </div>
@@ -215,6 +279,54 @@ export function ConversationPage() {
         </div>
       )}
       {half("zh")}
+
+      {sheet === "model" && (
+        <Sheet onClose={() => setSheet(null)}>
+          <h2>双语对话翻译模型</h2>
+          <ModelPicker kind="conversation" value={model} onChange={(v) => updateSettings({ conversationModel: v })} />
+        </Sheet>
+      )}
+
+      {sheet === "record" && (
+        <Sheet onClose={() => setSheet(null)}>
+          <h2>本次对话记录</h2>
+          {msgs.length === 0 ? (
+            <p className="muted">还没有内容。</p>
+          ) : (
+            <div className="card" style={{ maxHeight: "40vh", overflowY: "auto" }}>
+              {msgs.map((m) => (
+                <div key={m.id} style={{ marginBottom: 10 }}>
+                  <div className="small muted">
+                    {m.from === "zh" ? "🇨🇳 我" : "🇮🇹 对方"} · {time(m.at)}
+                  </div>
+                  <div>{m.source}</div>
+                  <div style={{ color: "#38bdf8" }}>{m.translation || "（翻译失败）"}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="muted small">
+            翻译每句话时会参考最近 12 句聊天内容，代词、人名、文件名会翻得更准确。对话记录只保存在这台手机上，
+            {retention ? `超过 ${retention} 天自动删除` : "永久保存"}（可在设置里修改），也可以在"历史"里导出。
+          </p>
+
+          <h2>以前的对话</h2>
+          {past.length === 0 && <p className="muted small">没有其他对话记录。</p>}
+          {past.map((s) => (
+            <div key={s.id} className="card row" style={{ flexWrap: "nowrap" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div>{s.title}</div>
+                <div className="small muted">
+                  最后：{new Date(s.endedAt ?? s.startedAt).toLocaleString("zh-CN")} · {formatUsd(s.costUsd)}
+                </div>
+              </div>
+              <button className="btn" onClick={() => resume(s.id)}>
+                继续
+              </button>
+            </div>
+          ))}
+        </Sheet>
+      )}
     </div>
   );
 }

@@ -62,6 +62,21 @@ export const LIVE_OUTPUT_PER_HOUR = 20_000;
 export const REFINE_INPUT_PER_HOUR = 40_000 / 3;
 export const REFINE_OUTPUT_PER_HOUR = 70_000 / 3;
 
+// 双语对话：每句约 1000 token 输入（系统提示 + 前文聊天记录 + 这句话）、约 40 token 译文；
+// Haiku / Opus 实时翻译时低档思考约 60 token，Sonnet 关闭思考
+export const CONVO_INPUT_PER_TURN = 1000;
+export const CONVO_OUTPUT_PER_TURN = 40;
+const CONVO_THINKING_PER_TURN: Record<OnlineModelId, number> = {
+  "claude-haiku-5-5": 60,
+  "claude-sonnet-5-5": 0,
+  "claude-opus-5-5": 60,
+};
+
+export function estimateConversation(model: LiveModelChoice, turns = 100): number {
+  if (model === "offline") return 0;
+  return tokenCost(model, CONVO_INPUT_PER_TURN * turns, (CONVO_OUTPUT_PER_TURN + CONVO_THINKING_PER_TURN[model]) * turns);
+}
+
 export function tokenCost(model: OnlineModelId, input: number, output: number): number {
   const m = MODELS[model];
   return (input * m.inputPerM + output * m.outputPerM) / 1_000_000;

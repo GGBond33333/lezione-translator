@@ -117,6 +117,19 @@ export async function deleteSession(id: string): Promise<void> {
   });
 }
 
+export async function listConversations(): Promise<Session[]> {
+  return (await listSessions()).filter((s) => s.kind === "conversation");
+}
+
+/** 删除超过保存期限的对话记录（按最后一次说话的时间算），返回删除的数量。days = 0 表示永久保存 */
+export async function purgeOldConversations(days: number, now = Date.now()): Promise<number> {
+  if (!days || days <= 0) return 0;
+  const cutoff = now - days * 86_400_000;
+  const old = (await listConversations()).filter((s) => (s.endedAt ?? s.startedAt) < cutoff);
+  for (const s of old) await deleteSession(s.id);
+  return old.length;
+}
+
 // —— 句子 ——
 export async function saveUtterance(u: Utterance): Promise<void> {
   await wrap((await store("utterances", "readwrite")).put(u));

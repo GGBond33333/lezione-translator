@@ -5,7 +5,7 @@ import { bestTranslation, shareFile, toMarkdown, toPlainText } from "../../core/
 import { formatUsd, MODELS, type OnlineModelId } from "../../core/models-catalog";
 import { useOnline } from "../../core/network";
 import { refineSession, type RefineProgress } from "../../core/refine";
-import { useSettings } from "../../core/settings";
+import { getSettings, useSettings } from "../../core/settings";
 import type { GlossaryEntry } from "../../core/translator";
 import {
   deleteSession,
@@ -14,6 +14,7 @@ import {
   listAudioChunks,
   listSessions,
   listUtterances,
+  purgeOldConversations,
   saveCourse,
   type Session,
   type Utterance,
@@ -24,7 +25,15 @@ function duration(s: Session): string {
   return min >= 60 ? `${Math.floor(min / 60)} 小时 ${min % 60} 分` : `${min} 分钟`;
 }
 
-export function HistoryPage({ openId, onClearOpen }: { openId: string | null; onClearOpen(): void }) {
+export function HistoryPage({
+  openId,
+  onClearOpen,
+  onContinueConversation,
+}: {
+  openId: string | null;
+  onClearOpen(): void;
+  onContinueConversation(id: string): void;
+}) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -36,10 +45,15 @@ export function HistoryPage({ openId, onClearOpen }: { openId: string | null; on
   }, [openId, onClearOpen]);
 
   useEffect(() => {
-    if (!selected) void listSessions().then(setSessions);
+    if (!selected)
+      void purgeOldConversations(getSettings().conversationRetentionDays)
+        .catch(() => 0)
+        .then(listSessions)
+        .then(setSessions);
   }, [selected]);
 
-  if (selected) return <SessionDetail id={selected} onBack={() => setSelected(null)} />;
+  if (selected)
+    return <SessionDetail id={selected} onBack={() => setSelected(null)} onContinueConversation={onContinueConversation} />;
 
   return (
     <div className="page">
@@ -64,7 +78,15 @@ export function HistoryPage({ openId, onClearOpen }: { openId: string | null; on
   );
 }
 
-function SessionDetail({ id, onBack }: { id: string; onBack(): void }) {
+function SessionDetail({
+  id,
+  onBack,
+  onContinueConversation,
+}: {
+  id: string;
+  onBack(): void;
+  onContinueConversation(id: string): void;
+}) {
   const settings = useSettings();
   const online = useOnline();
   const [session, setSession] = useState<Session | null>(null);
@@ -149,6 +171,11 @@ function SessionDetail({ id, onBack }: { id: string; onBack(): void }) {
         <button className="btn" onClick={() => shareFile(`${base}.txt`, toPlainText(session, items), "text/plain")}>
           导出 TXT
         </button>
+        {session.kind === "conversation" && (
+          <button className="btn primary" onClick={() => onContinueConversation(id)}>
+            💬 继续这次对话
+          </button>
+        )}
         {session.kind === "lecture" && (
           <button className="btn primary" disabled={!!progress || !online || !settings.apiKey} onClick={() => setShowRefine((v) => !v)}>
             ✨ 课后精修

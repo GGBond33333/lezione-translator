@@ -1,4 +1,4 @@
-import { LANGS } from "./languages";
+import { LANGS, type Lang } from "./languages";
 import type { GlossaryEntry, TranslateContext } from "./translator";
 
 function glossaryBlock(glossary?: GlossaryEntry[]): string {
@@ -60,6 +60,53 @@ export function parseTagged(output: string, count: number): string[] {
     }
   }
   return result;
+}
+
+// —— 双语对话 ——
+export interface ConversationTurn {
+  from: Lang;
+  source: string;
+  translation: string;
+}
+
+/** 翻译时附带的前文：最多 MAX_TURNS 句、MAX_CHARS 个字符，从最近的往前取 */
+export const CONTEXT_MAX_TURNS = 12;
+const CONTEXT_MAX_CHARS = 3000;
+
+export function pickContext(history: ConversationTurn[]): ConversationTurn[] {
+  const picked: ConversationTurn[] = [];
+  let chars = 0;
+  for (let i = history.length - 1; i >= 0 && picked.length < CONTEXT_MAX_TURNS; i--) {
+    const t = history[i];
+    if (!t.translation) continue;
+    chars += t.source.length + t.translation.length;
+    if (chars > CONTEXT_MAX_CHARS && picked.length) break;
+    picked.unshift(t);
+  }
+  return picked;
+}
+
+/** 双语对话的系统提示：两个方向共用同一段，内容稳定便于缓存 */
+export function conversationSystemPrompt(): string {
+  return (
+    `You are a live interpreter in a face-to-face conversation between a Chinese international student in Italy ` +
+    `and an Italian speaker (for example at a university office, a doctor, a bank, a shop, or with a flatmate). ` +
+    `Each turn you translate one utterance: Simplified Chinese into natural spoken Italian, or Italian into natural Simplified Chinese.\n\n` +
+    `The utterance comes from speech recognition and may contain misheard words or missing punctuation; infer what was meant. ` +
+    `Use the earlier conversation to resolve pronouns, omitted subjects, names, document names and the level of formality ` +
+    `(use the polite "Lei" form in Italian unless the conversation is clearly informal). ` +
+    `Keep the translation as short and direct as the original: it will be shown on screen and read aloud.\n\n` +
+    `Reply with only the translation, without quotes, notes or explanations.`
+  );
+}
+
+const LANG_TAG: Record<Lang, string> = { zh: "中文", it: "Italiano" };
+
+export function conversationUserMessage(text: string, from: Lang, to: Lang, history: ConversationTurn[]): string {
+  const ctx = pickContext(history);
+  const lines = ctx.map((t) => `[${LANG_TAG[t.from]}] ${t.source}\n  → ${t.translation}`).join("\n");
+  const prefix = lines ? `Conversation so far (context only, do not translate again):\n${lines}\n\n` : "";
+  return `${prefix}Translate this ${LANGS[from].promptName} utterance into ${LANGS[to].promptName}:\n${text}`;
 }
 
 /** 课后精修：逐段重新翻译（上下文更完整） */
