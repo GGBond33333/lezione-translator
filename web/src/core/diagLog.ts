@@ -1,7 +1,7 @@
 // 诊断日志：记录识别启动、错误、麦克风被打断、前后台切换等事件。
 // 只保存在本机，最多保留最近 MAX 条；用户可以在设置页复制出来，用于定位"转写突然中断"一类问题。
 
-export const DIAG_MAX = 200;
+export const DIAG_MAX = 2000;
 const KEY = "lt.diag.v1";
 
 export interface DiagEntry {

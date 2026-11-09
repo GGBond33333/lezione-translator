@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearDiag, DIAG_MAX, diag, getDiag } from "./diagLog";
-import { END_TIMEOUT_MS, WATCHDOG_MS, WebSpeechRecognizer } from "./webSpeechRecognizer";
+import { END_TIMEOUT_MS, looksReplaced, WATCHDOG_MS, WebSpeechRecognizer } from "./webSpeechRecognizer";
 import { SegmentQueue } from "./whisperRecognizer";
 
 /** 模拟 Safari 的语音识别；silentEnd = true 时 abort/stop 后不触发 onend（Safari 偶尔会这样） */
@@ -152,5 +152,15 @@ describe("诊断日志", () => {
     expect(list).toHaveLength(DIAG_MAX);
     expect(list[0].event).toBe("事件 50");
     expect(list.at(-1)!.event).toBe(`事件 ${DIAG_MAX + 49}`);
+  });
+});
+
+describe("漏句诊断", () => {
+  it("新结果是旧半句的延续时不算漏句，开头完全不同才算", () => {
+    expect(looksReplaced("oggi parliamo", "oggi parliamo del Barocco")).toBe(false);
+    expect(looksReplaced("Oggi parliamo", "oggi, parliamo di")).toBe(false);
+    expect(looksReplaced("oggi parliamo del Barocco", "Monteverdi nacque")).toBe(true);
+    expect(looksReplaced("sì", "Monteverdi")).toBe(false); // 太短不判断
+    expect(looksReplaced("今天我们讲巴洛克", "蒙特威尔第出生于")).toBe(true);
   });
 });

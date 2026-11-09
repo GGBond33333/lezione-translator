@@ -70,7 +70,10 @@ export class WhisperRecognizer implements Recognizer {
   private rebuilding: Promise<void> | null = null;
   private failedSegments = 0;
   private skipped = 0;
-  private queue = new SegmentQueue<{ audio: Float32Array; lang: Lang }>((s) => this.transcribe(s.audio, s.lang));
+  private segments = 0;
+  private queue = new SegmentQueue<{ audio: Float32Array; lang: Lang; seg: number; level: number }>((s) =>
+    this.transcribe(s.audio, s.lang, s.seg, s.level),
+  );
 
   constructor(private chunkSeconds = 15) {}
 
@@ -174,9 +177,16 @@ export class WhisperRecognizer implements Recognizer {
     const rate = this.sampleRate;
     this.buffer = [];
     this.bufferedSamples = 0;
-    if (rms(raw) < SILENCE_RMS) return;
+    const seg = ++this.segments;
+    const level = rms(raw);
+    const secs = (raw.length / rate).toFixed(1);
+    if (level < SILENCE_RMS) {
+      // 诊断：老师离得远或声音小时，整段都可能被当成静音跳过
+      diag(`离线识别：第 ${seg} 段（${secs} 秒）音量 ${level.toFixed(4)} 低于 ${SILENCE_RMS}，当作静音跳过`);
+      return;
+    }
     const audio = resample(raw, rate);
-    if (!this.queue.push({ audio, lang: this.lang })) {
+    if (!this.queue.push({ audio, lang: this.lang, seg, level })) {
       this.skipped++;
       diag(`离线识别：积压过多，跳过一段（累计 ${this.skipped} 段）`);
       if (this.skipped === 1)
@@ -184,11 +194,16 @@ export class WhisperRecognizer implements Recognizer {
     }
   }
 
-  private async transcribe(audio: Float32Array, lang: Lang) {
+  private async transcribe(audio: Float32Array, lang: Lang, seg: number, level: number) {
     this.handlers?.onStatus?.("processing");
+    const began = Date.now();
+    const secs = (audio.length / 16_000).toFixed(1);
     try {
       const text = await transcribeOffline(audio, LANGS[lang].whisper);
       this.failedSegments = 0;
+      diag(
+        `离线识别：第 ${seg} 段（${secs} 秒，音量 ${level.toFixed(4)}）识别用了 ${((Date.now() - began) / 1000).toFixed(1)} 秒，得到 ${text.length} 字`,
+      );
       if (text) this.handlers?.onFinal(text);
     } catch (e) {
       // 模型进程崩溃后下一段会自动重建，只在第一次失败时提示，避免每段都刷报错

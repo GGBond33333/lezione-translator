@@ -40,6 +40,19 @@ function pageHidden(): boolean {
 export const WATCHDOG_MS = 45_000;
 /** 出错或调用 abort 后，等 onend 的最长时间；Safari 有时不触发 onend，超时就直接换一个新实例 */
 export const END_TIMEOUT_MS = 2_000;
+/**
+ * 诊断用：判断还没定稿的半句是否被新内容直接覆盖掉了（这段文字既没定稿，也不会再出现）。
+ * 新的识别结果通常是旧半句的延续；开头完全不同就说明旧的被丢了。
+ */
+export function looksReplaced(prev: string, next: string): boolean {
+  const norm = (t: string) => t.toLowerCase().replace(/[\s，。,.!?！？]/g, "");
+  const a = norm(prev);
+  if (a.length < 4) return false;
+  const b = norm(next);
+  const head = a.slice(0, Math.min(6, a.length));
+  return !b.startsWith(head);
+}
+
 const FATAL_ERRORS = new Set(["not-allowed", "service-not-allowed", "language-not-supported"]);
 
 export class WebSpeechRecognizer implements Recognizer {
@@ -57,6 +70,10 @@ export class WebSpeechRecognizer implements Recognizer {
   /** 连续多少次重启后都没有识别到任何内容，用于退避，避免网络断开时疯狂重试 */
   private failures = 0;
   private gotResult = false;
+  // —— 诊断统计 ——
+  private endedAt = 0;
+  private spawnedAt = 0;
+  private finalsInInstance = 0;
 
   async start(lang: Lang, handlers: RecognizerHandlers): Promise<void> {
     if (!getCtor()) throw new Error("这个浏览器不支持语音识别，请用 Safari 或 Chrome，或者切换到离线模式");
@@ -105,6 +122,7 @@ export class WebSpeechRecognizer implements Recognizer {
     this.rec = null;
     if (this.endTimer) clearTimeout(this.endTimer);
     this.endTimer = null;
+    if (old) this.noteEnd("被替换");
     this.flushPartial();
     if (!old) return;
     old.onresult = null;
@@ -144,6 +162,7 @@ export class WebSpeechRecognizer implements Recognizer {
     rec.interimResults = true;
     this.lastResultAt = Date.now();
     this.gotResult = false;
+    this.finalsInInstance = 0;
 
     rec.onresult = (e) => {
       if (rec !== this.rec) return;
@@ -151,17 +170,23 @@ export class WebSpeechRecognizer implements Recognizer {
       this.gotResult = true;
       this.failures = 0;
       let interim = "";
+      let finalized = false;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         const text = r[0].transcript.trim();
         if (r.isFinal) {
+          finalized = true;
+          this.finalsInInstance++;
           if (text) this.handlers?.onFinal(text);
           this.partial = "";
         } else {
           interim += r[0].transcript;
         }
       }
-      this.partial = interim.trim();
+      const next = interim.trim();
+      if (!finalized && this.partial && looksReplaced(this.partial, next))
+        diag(`联网识别：疑似漏句，未定稿的半句被覆盖：「${this.partial.slice(0, 40)}」→「${next.slice(0, 20)}」`);
+      this.partial = next;
       this.handlers?.onPartial(this.partial);
     };
 
@@ -194,6 +219,7 @@ export class WebSpeechRecognizer implements Recognizer {
       if (rec !== this.rec) return;
       if (this.endTimer) clearTimeout(this.endTimer);
       this.endTimer = null;
+      this.noteEnd("自动结束");
       this.flushPartial();
       this.rec = null;
       if (this.active) {
@@ -215,7 +241,21 @@ export class WebSpeechRecognizer implements Recognizer {
       this.scheduleRestart();
       return;
     }
+    const now = Date.now();
+    if (this.endedAt) diag(`联网识别：重新开始，空档 ${((now - this.endedAt) / 1000).toFixed(1)} 秒（这段时间说的话收不到）`);
+    this.endedAt = 0;
+    this.spawnedAt = now;
     this.handlers?.onStatus?.("listening");
+  }
+
+  /** 诊断：记录一次识别实例结束，以及它持续了多久、定稿了几句 */
+  private noteEnd(how: string) {
+    if (!this.spawnedAt) return;
+    const secs = Math.round((Date.now() - this.spawnedAt) / 1000);
+    const pending = this.partial ? `，结束时有未定稿半句 ${this.partial.length} 字（已保存）` : "";
+    diag(`联网识别：${how}，持续 ${secs} 秒，定稿 ${this.finalsInInstance} 句${pending}`);
+    this.spawnedAt = 0;
+    this.endedAt = Date.now();
   }
 
   async restart(reason: string): Promise<void> {
