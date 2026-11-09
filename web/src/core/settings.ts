@@ -15,6 +15,8 @@ export interface Settings {
   /** 单节课费用上限（美元），0 表示不限 */
   costCapUsd: number;
   audioBackup: boolean;
+  /** 联网识别（Safari 语音识别）时也同时录音备份；iPhone 上两者抢麦克风，可能让识别中断，默认关闭 */
+  audioBackupWithWebSpeech: boolean;
   offlineReady: boolean;
   onboarded: boolean;
 }
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conversationRetentionDays: 30,
   costCapUsd: 3,
   audioBackup: true,
+  audioBackupWithWebSpeech: false,
   offlineReady: false,
   onboarded: false,
 };

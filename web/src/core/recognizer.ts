@@ -16,4 +16,6 @@ export interface Recognizer {
   start(lang: Lang, handlers: RecognizerHandlers): Promise<void>;
   /** 停止识别；resolve 时所有剩余结果都已经通过 onFinal 发出 */
   stop(): Promise<void>;
+  /** 被系统打断（切后台、来电、通知）后重建识别；不丢已经识别好的内容 */
+  restart(reason: string): Promise<void>;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ModelPicker } from "../../components/ModelPicker";
+import { clearDiag, formatDiag } from "../../core/diagLog";
 import { loadOfflineModels, type DownloadProgress } from "../../core/mlClient";
 import { updateSettings, useSettings, type NetMode } from "../../core/settings";
 import { deleteCourse, listCourses, newId, saveCourse, type Course } from "../../storage/db";
@@ -135,9 +136,25 @@ export function SettingsPage() {
         <span>
           上课时同时录音备份（3 小时约 40MB，存在本机）
           <br />
-          <span className="muted small">如果开启后语音识别不出字，可以关掉这一项试试。</span>
+          <span className="muted small">离线识别时一直有效。</span>
         </span>
       </label>
+      {s.audioBackup && (
+        <label className="card check">
+          <input
+            type="checkbox"
+            checked={s.audioBackupWithWebSpeech}
+            onChange={(e) => updateSettings({ audioBackupWithWebSpeech: e.target.checked })}
+          />
+          <span>
+            联网识别时也录音备份
+            <br />
+            <span className="muted small">
+              iPhone 上录音和 Safari 语音识别会抢麦克风，可能导致识别突然不出字，所以默认关闭。
+            </span>
+          </span>
+        </label>
+      )}
 
       <h2>离线模型</h2>
       <div className="card">
@@ -184,8 +201,55 @@ export function SettingsPage() {
           <li>第一次开始识别时允许使用麦克风和语音识别。</li>
           <li>上课时保持屏幕亮着（可以用省电黑屏），iOS 锁屏后网页无法继续录音。</li>
           <li>3 小时课大约耗电 30–40%，建议带充电宝。</li>
+          <li>如果屏幕还是会自动变暗锁屏：iPhone 设置 → 显示与亮度 → 自动锁定，上课时临时改为"永不"。</li>
         </ol>
       </div>
+
+      <h2>诊断日志</h2>
+      <DiagPanel />
+    </div>
+  );
+}
+
+function DiagPanel() {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const text = open ? formatDiag() : "";
+  return (
+    <div className="card">
+      <p className="muted small" style={{ marginTop: 0 }}>
+        记录识别启动、中断、自动恢复等事件，只保存在这台手机上。转写出问题时，复制日志发给开发者帮助定位。
+      </p>
+      <div className="row">
+        <button className="btn" onClick={() => setOpen((v) => !v)}>
+          {open ? "收起" : "查看日志"}
+        </button>
+        <button
+          className="btn"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(formatDiag());
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } catch {
+              setOpen(true);
+              alert("无法自动复制，请在下方长按选择全部文字后复制");
+            }
+          }}
+        >
+          {copied ? "已复制" : "复制日志"}
+        </button>
+        <button
+          className="btn"
+          onClick={() => {
+            clearDiag();
+            setOpen(false);
+          }}
+        >
+          清空
+        </button>
+      </div>
+      {open && <textarea readOnly value={text} style={{ marginTop: 8, minHeight: 200, fontSize: 12 }} />}
     </div>
   );
 }

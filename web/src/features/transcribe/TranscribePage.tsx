@@ -135,6 +135,11 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
             {lec.pendingCount > 0 && <span className="chip amber">待翻译 {lec.pendingCount}</span>}
           </div>
           {lec.notice && <div className="notice">{lec.notice}</div>}
+          {lec.stalled && lec.state === "running" && (
+            <button className="btn primary big block" style={{ marginTop: 8 }} onClick={() => void lec.restartManually()}>
+              🎙️ 重新开始识别
+            </button>
+          )}
 
           <div className="transcript" ref={listRef} onScroll={onScroll}>
             {lec.items.length > VISIBLE && (
