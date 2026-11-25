@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Empty, Icon } from "../../components/Icon";
 import { ModelPicker } from "../../components/ModelPicker";
 import { describeApiError } from "../../core/claudeTranslator";
 import { bestTranslation, shareFile, toMarkdown, toPlainText } from "../../core/export";
@@ -58,22 +59,28 @@ export function HistoryPage({
   return (
     <div className="page">
       <h1>历史记录</h1>
-      {sessions.length === 0 && <p className="muted">还没有记录。上课转写或对话后会自动保存在这台手机上。</p>}
-      {sessions.map((s) => (
-        <button key={s.id} className="card session-item" onClick={() => setSelected(s.id)}>
-          <div className="row">
-            <strong style={{ flex: 1 }}>
-              {s.kind === "lecture" ? "📚" : "💬"} {s.title}
-            </strong>
-          </div>
-          <div className="row small muted" style={{ marginTop: 4 }}>
-            <span>{duration(s)}</span>
-            <span>花费 {formatUsd(s.costUsd)}</span>
-            {s.refinedAt && <span className="chip green">已精修</span>}
-            {!s.endedAt && s.kind === "lecture" && <span className="chip amber">未结束</span>}
-          </div>
-        </button>
-      ))}
+      {sessions.length === 0 && <Empty emoji="📚" title="还没有记录" desc="上课转写或双语对话后，会自动保存在这台手机上。" />}
+      {sessions.length > 0 && (
+        <div className="group">
+          {sessions.map((s) => (
+            <button key={s.id} className="cell session-item" onClick={() => setSelected(s.id)}>
+              <span className={`tile ${s.kind === "lecture" ? "blue" : "green"}`}>{s.kind === "lecture" ? "📚" : "💬"}</span>
+              <span className="label">
+                <div className="title">{s.title}</div>
+                <div className="sub">
+                  <span>{duration(s)}</span>
+                  <span>花费 {formatUsd(s.costUsd)}</span>
+                </div>
+              </span>
+              {s.refinedAt && <span className="badge green">已精修</span>}
+              {!s.endedAt && s.kind === "lecture" && <span className="badge amber">未结束</span>}
+              <span className="chev">
+                <Icon name="chevron" size={16} />
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -153,53 +160,57 @@ function SessionDetail({
 
   return (
     <div className="page">
-      <button className="btn" onClick={onBack}>
-        ‹ 返回
+      <button className="back" onClick={onBack}>
+        <Icon name="back" /> 历史
       </button>
-      <h1 style={{ marginTop: 12 }}>{session.title}</h1>
-      <div className="row small muted">
+      <h1 style={{ fontSize: 26, marginTop: 4 }}>{session.title}</h1>
+      <div className="meta-row">
         <span>{new Date(session.startedAt).toLocaleString("zh-CN")}</span>
         <span>{duration(session)}</span>
         <span>{items.length} 句</span>
         <span>花费 {formatUsd(session.costUsd)}</span>
       </div>
 
-      <div className="row" style={{ marginTop: 12 }}>
-        <button className="btn" onClick={() => shareFile(`${base}.md`, toMarkdown(session, items))}>
-          导出 Markdown
-        </button>
-        <button className="btn" onClick={() => shareFile(`${base}.txt`, toPlainText(session, items), "text/plain")}>
-          导出 TXT
-        </button>
+      <div className="actions">
         {session.kind === "conversation" && (
-          <button className="btn primary" onClick={() => onContinueConversation(id)}>
-            💬 继续这次对话
+          <button className="btn primary big wide" onClick={() => onContinueConversation(id)}>
+            <Icon name="chat" /> 继续这次对话
           </button>
         )}
         {session.kind === "lecture" && (
-          <button className="btn primary" disabled={!!progress || !online || !settings.apiKey} onClick={() => setShowRefine((v) => !v)}>
-            ✨ 课后精修
+          <button
+            className="btn primary big wide"
+            disabled={!!progress || !online || !settings.apiKey}
+            onClick={() => setShowRefine((v) => !v)}
+          >
+            <Icon name="sparkle" /> 课后精修
           </button>
         )}
+        <button className="btn" onClick={() => shareFile(`${base}.md`, toMarkdown(session, items))}>
+          <Icon name="share" /> 导出 Markdown
+        </button>
+        <button className="btn" onClick={() => shareFile(`${base}.txt`, toPlainText(session, items), "text/plain")}>
+          <Icon name="share" /> 导出 TXT
+        </button>
       </div>
       {session.kind === "lecture" && (!online || !settings.apiKey) && (
         <p className="muted small">课后精修需要联网并在设置里填写 API Key。</p>
       )}
 
       {showRefine && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <p className="small muted" style={{ marginTop: 0 }}>
+        <div style={{ marginTop: 16 }}>
+          <p className="small muted" style={{ margin: "0 16px 8px" }}>
             把整节课的原文交给大模型重新翻译，并生成课堂笔记（要点、时间线、人名/作品/术语表）。
           </p>
           <ModelPicker kind="refine" value={refineModel} onChange={setRefineModel} hours={hours} />
-          <button className="btn primary block" onClick={runRefine}>
+          <button className="btn primary big block" style={{ marginTop: 12 }} onClick={runRefine}>
             用 {MODELS[refineModel].name} 开始精修
           </button>
         </div>
       )}
 
       {progress && (
-        <div className="card">
+        <div className="card" style={{ marginTop: 16 }}>
           <div className="row small">
             <span>{progress.step}</span>
             <span className="spacer" />
@@ -211,10 +222,14 @@ function SessionDetail({
           <p className="muted small">精修时请保持页面打开。</p>
         </div>
       )}
-      {error && <div className="notice">{error}</div>}
+      {error && (
+        <div className="notice">
+          <span className="notice-body">{error}</span>
+        </div>
+      )}
 
       {suggested.length > 0 && session.courseId && (
-        <div className="card">
+        <div className="card" style={{ marginTop: 16 }}>
           <strong>发现 {suggested.length} 个术语，加入课程术语表？</strong>
           {suggested.map((g, i) => (
             <label key={i} className="check">
@@ -231,7 +246,7 @@ function SessionDetail({
               {g.source} → {g.target}
             </label>
           ))}
-          <button className="btn primary block" onClick={addGlossary}>
+          <button className="btn primary block" style={{ marginTop: 8 }} onClick={addGlossary}>
             加入术语表
           </button>
         </div>
@@ -239,29 +254,37 @@ function SessionDetail({
 
       {audioUrl && (
         <>
-          <h2>录音备份</h2>
-          <audio controls src={audioUrl} preload="metadata" />
+          <div className="group-title">录音备份</div>
+          <div className="card">
+            <audio controls src={audioUrl} preload="metadata" style={{ marginTop: 0 }} />
+          </div>
         </>
       )}
 
       {session.notes && (
         <>
-          <h2>课堂笔记</h2>
+          <div className="group-title">课堂笔记</div>
           <div className="card notes">{session.notes}</div>
         </>
       )}
 
-      <h2>双语全文</h2>
-      {items.map((u) => (
-        <div key={u.seq} className="utt" style={{ margin: "0 -16px" }}>
-          <div className="src">{u.source}</div>
-          <div className={`tr${bestTranslation(u) ? "" : " pending"}`}>{bestTranslation(u) || "（未翻译）"}</div>
-          {u.refined && u.translation && u.refined !== u.translation && <div className="meta">实时译文：{u.translation}</div>}
+      <div className="group-title">双语全文 · {items.length} 句</div>
+      {items.length === 0 ? (
+        <Empty emoji="📝" title="这条记录还没有内容" />
+      ) : (
+        <div className="full-text">
+          {items.map((u) => (
+            <div key={u.seq} className="utt">
+              <div className="src">{u.source}</div>
+              <div className={`tr${bestTranslation(u) ? "" : " pending"}`}>{bestTranslation(u) || "（未翻译）"}</div>
+              {u.refined && u.translation && u.refined !== u.translation && <div className="meta">实时译文：{u.translation}</div>}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
       <button
-        className="btn danger block"
+        className="btn danger big block"
         style={{ marginTop: 24 }}
         onClick={async () => {
           if (!window.confirm("删除这条记录和录音？删除后无法恢复。")) return;
@@ -269,7 +292,7 @@ function SessionDetail({
           onBack();
         }}
       >
-        删除这条记录
+        <Icon name="trash" /> 删除这条记录
       </button>
     </div>
   );

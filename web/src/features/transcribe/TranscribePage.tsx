@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Dots, Icon } from "../../components/Icon";
 import { ModelPicker, Sheet } from "../../components/ModelPicker";
 import { LANGS, type Lang } from "../../core/languages";
 import { estimateLivePerHour, formatUsd, MODELS, OFFLINE_INFO } from "../../core/models-catalog";
@@ -23,14 +24,15 @@ function LevelMeter({ level }: { level: number }) {
   const db = 20 * Math.log10(Math.max(level, 1e-6));
   const pct = Math.min(100, Math.max(0, ((db + 60) / 50) * 100));
   return (
-    <div style={{ marginTop: 6 }}>
-      <div className="meter" aria-label="收音音量">
+    <div style={{ marginTop: 10 }}>
+      <div className="meter" role="meter" aria-label="收音音量" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
         <div style={{ width: `${pct}%` }} />
       </div>
       {startedLongAgo && loudest < 0.003 && (
-        <p className="muted small" style={{ margin: "4px 0 0" }}>
-          收音很弱：老师说话时音量条几乎不动。请把手机往讲台方向放、离近一点，或外接夹领麦克风。
-        </p>
+        <div className="meter-hint">
+          <span>🎙️</span>
+          <span>收音很弱：老师说话时音量条几乎不动。请把手机往讲台方向放、离近一点，或外接夹领麦克风。</span>
+        </div>
       )}
     </div>
   );
@@ -85,100 +87,140 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
     <div className="page fill">
       {lec.state === "idle" && !lec.session && (
         <>
-          <h1>课堂转写</h1>
-          {unfinished && (
-            <div className="notice info">
-              上次的「{unfinished.title}」没有结束。
-              <div className="row" style={{ marginTop: 8 }}>
-                <button className="btn primary" onClick={() => lec.start({ sourceLang: unfinished.sourceLang, resumeId: unfinished.id })}>
-                  继续上次的课
-                </button>
-                <button className="btn" onClick={() => onOpenHistory(unfinished.id)}>
-                  查看
-                </button>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "0 -16px", padding: "0 16px" }}>
+            <h1>课堂转写</h1>
+            {unfinished && (
+              <div className="card" style={{ background: "var(--accent-tint)", boxShadow: "none" }}>
+                <div style={{ fontWeight: 600 }}>上次的课还没结束</div>
+                <div className="muted small" style={{ marginTop: 2 }}>
+                  「{unfinished.title}」
+                </div>
+                <div className="row" style={{ marginTop: 12, flexWrap: "nowrap" }}>
+                  <button
+                    className="btn primary"
+                    style={{ flex: 1 }}
+                    onClick={() => lec.start({ sourceLang: unfinished.sourceLang, resumeId: unfinished.id })}
+                  >
+                    继续上次的课
+                  </button>
+                  <button className="btn gray" onClick={() => onOpenHistory(unfinished.id)}>
+                    查看
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="group-title">这节课</div>
+            <div className="group">
+              <label className="cell">
+                <span className="label">课程</span>
+                <select value={courseId} onChange={(e) => setCourseId(e.target.value)} aria-label="选择课程">
+                  <option value="">不选课程</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}（{c.glossary.length} 个术语）
+                    </option>
+                  ))}
+                </select>
+                <span className="chev">
+                  <Icon name="chevron" size={16} />
+                </span>
+              </label>
+              <button className="cell" onClick={addCourse}>
+                <span className="label" style={{ color: "var(--accent)" }}>
+                  新建课程
+                </span>
+                <span className="chev" style={{ color: "var(--accent)" }}>
+                  <Icon name="plus" size={18} />
+                </span>
+              </button>
+              <div className="cell-block">
+                <div className="label">老师讲的语言</div>
+                <div className="seg">
+                  {(["it", "zh"] as Lang[]).map((l) => (
+                    <button key={l} className={lang === l ? "on" : ""} onClick={() => setLang(l)}>
+                      {LANGS[l].flag} {l === "it" ? "意大利语 → 中文" : "中文 → 意大利语"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          )}
-          <label className="field">
-            <span>课程（用于统一专业术语的译法）</span>
-            <div className="row" style={{ flexWrap: "nowrap" }}>
-              <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-                <option value="">不选课程</option>
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}（{c.glossary.length} 个术语）
-                  </option>
-                ))}
-              </select>
-              <button className="btn" onClick={addCourse}>
-                新建
+            <div className="group-foot">选择课程后，会用它的术语表统一专业词汇的译法。</div>
+
+            <div className="group-title">识别与翻译</div>
+            <div className="group">
+              <button className="cell" onClick={() => setPicker(true)}>
+                <span className="label">实时翻译</span>
+                <span className="value">
+                  {modelName.replace("Claude ", "")} · 约 {formatUsd(estimateLivePerHour(settings.liveModel))}/时
+                </span>
+                <span className="chev">
+                  <Icon name="chevron" size={16} />
+                </span>
               </button>
+              <div className="cell">
+                <span className="label">语音识别</span>
+                <span className="value">
+                  {settings.liveRecognizer === "cloud" && settings.openaiKey
+                    ? `云端远场 · 约 ${formatUsd(ASR_USD_PER_HOUR)}/时`
+                    : "Safari 自带 · 免费"}
+                </span>
+              </div>
             </div>
-          </label>
-          <div className="field">
-            <span>老师讲的语言</span>
-            <div className="seg">
-              {(["it", "zh"] as Lang[]).map((l) => (
-                <button key={l} className={lang === l ? "on" : ""} onClick={() => setLang(l)}>
-                  {LANGS[l].flag} {l === "it" ? "意大利语 → 中文" : "中文 → 意大利语"}
-                </button>
-              ))}
+            <div className="group-foot">语音识别方式可在"设置 → 语音识别"里更换。</div>
+
+            <div className="card tip" style={{ marginTop: 20 }}>
+              <span className="tile orange">💡</span>
+              <span>
+                长课建议：把手机插上充电宝，开始后可以打开"省电黑屏"。课后在"历史"里点"课后精修"，用 Sonnet 生成准确的全文译文和课堂笔记。
+              </span>
             </div>
           </div>
-          <div className="field">
-            <span>实时翻译模型</span>
-            <button className="btn block" style={{ textAlign: "left" }} onClick={() => setPicker(true)}>
-              {modelName} · 每小时约 {formatUsd(estimateLivePerHour(settings.liveModel))} ›
+          <div className="start-bar">
+            <button className="btn primary big block" onClick={() => lec.start({ courseId: courseId || undefined, sourceLang: lang })}>
+              <Icon name="mic" filled /> 开始上课
             </button>
-            <span className="muted small">
-              语音识别：
-              {settings.liveRecognizer === "cloud" && settings.openaiKey
-                ? `云端远场识别，每小时约 ${formatUsd(ASR_USD_PER_HOUR)}`
-                : "Safari 自带（免费）"}
-              ，可在"设置 → 语音识别"里更换
-            </span>
           </div>
-          <p className="muted small">
-            长课建议：把手机插上充电宝，开始后可以打开"省电黑屏"。课后在"历史"里点"课后精修"，用 Sonnet 生成准确的全文译文和课堂笔记。
-          </p>
-          <div className="spacer" />
-          <button className="btn primary big block" onClick={() => lec.start({ courseId: courseId || undefined, sourceLang: lang })}>
-            🎙️ 开始上课
-          </button>
         </>
       )}
 
       {lec.session && (
         <>
-          <div className="row">
-            <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {lec.session.title}
-            </strong>
+          <div className="lecture-head">
+            <span className="title">{lec.session.title}</span>
             <button className="chip blue" onClick={() => setPicker(true)}>
               {settings.liveModel === "offline" ? "离线" : MODELS[settings.liveModel].name.replace("Claude ", "")}
             </button>
           </div>
-          <div className="row" style={{ marginTop: 6 }}>
+          <div className="status-row">
             <span className={`chip ${offlineMode ? "amber" : "green"}`}>{offlineMode ? "离线" : "联网"}</span>
-            <span className={`chip ${lec.status === "reconnecting" ? "amber" : lec.status === "listening" ? "green" : ""}`}>
+            <span
+              className={`chip ${
+                lec.state === "paused" ? "" : lec.status === "reconnecting" ? "amber" : lec.status === "idle" ? "" : "green live"
+              }`}
+            >
               {lec.state === "paused" ? "已暂停" : STATUS_LABEL[lec.status]}
             </span>
             <span className="chip">本节 {formatUsd(lec.session.costUsd)}</span>
             <span className="chip">{elapsed} 分钟</span>
             {lec.pendingCount > 0 && <span className="chip amber">待翻译 {lec.pendingCount}</span>}
-            {lec.recKind && lec.state === "running" && <span className="chip">{KIND_LABEL[lec.recKind]}</span>}
+            {lec.recKind && lec.state === "running" && <span className="chip blue">{KIND_LABEL[lec.recKind]}</span>}
           </div>
           {lec.level !== null && lec.state === "running" && <LevelMeter level={lec.level} />}
-          {lec.notice && <div className="notice">{lec.notice}</div>}
+          {lec.notice && (
+            <div className="notice">
+              <span className="notice-body">{lec.notice}</span>
+            </div>
+          )}
           {lec.stalled && lec.state === "running" && (
             <button className="btn primary big block" style={{ marginTop: 8 }} onClick={() => void lec.restartManually()}>
-              🎙️ 重新开始识别
+              <Icon name="mic" filled /> 重新开始识别
             </button>
           )}
 
           <div className="transcript" ref={listRef} onScroll={onScroll}>
             {lec.items.length > VISIBLE && (
-              <div className="utt muted small">前面还有 {lec.items.length - VISIBLE} 句，结束后可在"历史"里查看全文</div>
+              <div className="utt more">前面还有 {lec.items.length - VISIBLE} 句，结束后可在"历史"里查看全文</div>
             )}
             {visible.map((u) => (
               <div className="utt" key={u.seq}>
@@ -186,7 +228,13 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
                 {u.translation ? (
                   <div className="tr">{u.refined || u.translation}</div>
                 ) : (
-                  <div className="tr pending">{u.status === "pending" ? "翻译中…" : "翻译失败，稍后重试"}</div>
+                  u.status === "pending" ? (
+                    <div className="tr pending">
+                      <Dots /> 翻译中
+                    </div>
+                  ) : (
+                    <div className="tr failed">翻译失败，稍后自动重试</div>
+                  )
                 )}
               </div>
             ))}
@@ -196,17 +244,17 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
           <div className="controls">
             {lec.state === "running" && (
               <>
-                <button className="btn" onClick={() => setPowerSave(true)}>
-                  🌙 省电黑屏
+                <button className="btn gray" onClick={() => setPowerSave(true)}>
+                  <Icon name="moon" /> 省电黑屏
                 </button>
-                <button className="btn" onClick={lec.pause}>
-                  ⏸ 暂停
+                <button className="btn gray" onClick={lec.pause}>
+                  <Icon name="pause" /> 暂停
                 </button>
               </>
             )}
             {lec.state === "paused" && (
               <button className="btn primary" onClick={lec.resume}>
-                ▶ 继续
+                <Icon name="play" filled /> 继续
               </button>
             )}
             {lec.state !== "idle" && (
@@ -216,7 +264,7 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
                   if (window.confirm("结束这节课？结束后可以在历史里导出和精修。")) void lec.finish();
                 }}
               >
-                ⏹ 结束
+                <Icon name="stop" filled /> 结束
               </button>
             )}
             {lec.state === "idle" && (
@@ -224,7 +272,7 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
                 <button className="btn primary" onClick={() => onOpenHistory(lec.session!.id)}>
                   导出 / 课后精修
                 </button>
-                <button className="btn" onClick={lec.reset}>
+                <button className="btn gray" onClick={lec.reset}>
                   新的一节课
                 </button>
               </>
@@ -248,12 +296,10 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
               <div className="tr">{u.refined || u.translation || "…"}</div>
             </div>
           ))}
-          <div className="src" style={{ color: "#38bdf8", opacity: 0.5 }}>
-            {lec.partial}
-          </div>
+          <div className="live">{lec.partial}</div>
           <div className="bar">
             <span>
-              {STATUS_LABEL[lec.status]} · {formatUsd(lec.session?.costUsd ?? 0)}
+              {STATUS_LABEL[lec.status]} · {formatUsd(lec.session?.costUsd ?? 0)} · 双击屏幕退出
             </span>
             <button onClick={() => setPowerSave(false)}>退出黑屏</button>
           </div>

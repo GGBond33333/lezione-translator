@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ModelPicker } from "../../components/ModelPicker";
+import { Empty, Icon } from "../../components/Icon";
 import { clearDiag, formatDiag } from "../../core/diagLog";
 import { loadOfflineModels, type DownloadProgress } from "../../core/mlClient";
 import { formatUsd } from "../../core/models-catalog";
@@ -45,33 +46,33 @@ export function SettingsPage() {
     <div className="page">
       <h1>设置</h1>
 
-      <h2>Claude API Key</h2>
-      <div className="card">
-        <label className="field">
-          <span>联网翻译需要你自己的 API Key（只保存在这台手机上）</span>
+      <div className="group-title">Claude API Key</div>
+      <div className="group">
+        <div className="cell-block">
           <div className="row" style={{ flexWrap: "nowrap" }}>
             <input
               type={showKey ? "text" : "password"}
               autoComplete="off"
               placeholder="sk-ant-..."
+              aria-label="Claude API Key"
               value={s.apiKey}
               onChange={(e) => updateSettings({ apiKey: e.target.value.trim() })}
             />
-            <button className="btn" onClick={() => setShowKey((v) => !v)}>
+            <button className="btn plain" onClick={() => setShowKey((v) => !v)}>
               {showKey ? "隐藏" : "显示"}
             </button>
           </div>
-        </label>
-        <div className="notice info" style={{ margin: 0 }}>
-          计费说明：联网翻译调用的是 Claude API，<b>不占用 Claude.ai 订阅（Pro/Max）的额度</b>。需要在 console.anthropic.com
-          单独充值、创建 API Key，按实际用量扣费。默认组合下，一节 3 小时的课约 1 美元。
         </div>
       </div>
+      <div className="group-foot">
+        联网翻译需要你自己的 API Key，只保存在这台手机上。它调用的是 Claude API，<b>不占用 Claude.ai 订阅（Pro/Max）的额度</b>
+        ，需要在 console.anthropic.com 单独充值、按用量扣费；默认组合下一节 3 小时的课约 1 美元。
+      </div>
 
-      <h2>语音识别（收音）</h2>
+      <div className="group-title">语音识别（收音）</div>
       <RecognizerSettings />
 
-      <h2>联网 / 离线</h2>
+      <div className="group-title">联网 / 离线</div>
       <div className="seg">
         {(
           [
@@ -85,18 +86,18 @@ export function SettingsPage() {
           </button>
         ))}
       </div>
-      <p className="muted small">自动：有网时用 Claude 翻译，没网或出错时用离线模型。</p>
+      <div className="group-foot">自动：有网时用 Claude 翻译，没网或出错时用离线模型。</div>
 
-      <h2>实时翻译模型</h2>
+      <div className="group-title">实时翻译模型</div>
       <ModelPicker kind="live" value={s.liveModel} onChange={(v) => updateSettings({ liveModel: v })} />
 
-      <h2>课后精修默认模型</h2>
+      <div className="group-title">课后精修默认模型</div>
       <ModelPicker kind="refine" value={s.refineModel} onChange={(v) => updateSettings({ refineModel: v })} />
 
-      <h2>双语对话模型</h2>
+      <div className="group-title">双语对话模型</div>
       <ModelPicker kind="conversation" value={s.conversationModel} onChange={(v) => updateSettings({ conversationModel: v })} />
 
-      <h2>对话记录保存时间</h2>
+      <div className="group-title">对话记录保存时间</div>
       <div className="seg">
         {(
           [
@@ -115,92 +116,106 @@ export function SettingsPage() {
           </button>
         ))}
       </div>
-      <p className="muted small">对话记录只保存在这台手机上，超过时间后自动删除。课堂记录不会自动删除。</p>
+      <div className="group-foot">对话记录只保存在这台手机上，超过时间后自动删除。课堂记录不会自动删除。</div>
 
-      <h2>费用上限</h2>
-      <div className="card">
-        <label className="field">
-          <span>单节课实时翻译 + 云端识别最多花费（美元，0 = 不限）</span>
+      <div className="group-title">费用上限</div>
+      <div className="group">
+        <label className="cell">
+          <span className="label">单节课最多花费</span>
+          <span className="muted">$</span>
           <input
             type="number"
             inputMode="decimal"
             min={0}
             step={0.5}
             value={s.costCapUsd}
+            style={{ width: 84, textAlign: "right" }}
             onChange={(e) => updateSettings({ costCapUsd: Math.max(0, Number(e.target.value) || 0) })}
           />
         </label>
-        <p className="muted small" style={{ margin: 0 }}>
-          超过后云端识别改回免费的 Safari 识别，翻译自动切换到 Haiku；已经是 Haiku 的话切换到离线模型（没下载离线模型则暂停翻译，只记录原文）。
-        </p>
+      </div>
+      <div className="group-foot">
+        包括实时翻译和云端识别，0 表示不限。超过后云端识别改回免费的 Safari 识别，翻译自动切换到 Haiku；已经是 Haiku
+        的话切换到离线模型（没下载离线模型则暂停翻译，只记录原文）。
       </div>
 
-      <h2>长课</h2>
-      <label className="card check">
-        <input type="checkbox" checked={s.audioBackup} onChange={(e) => updateSettings({ audioBackup: e.target.checked })} />
-        <span>
-          上课时同时录音备份（3 小时约 40MB，存在本机）
-          <br />
-          <span className="muted small">离线识别时一直有效。</span>
-        </span>
-      </label>
-      {s.audioBackup && (
-        <label className="card check">
+      <div className="group-title">长课</div>
+      <div className="group">
+        <label className="cell">
+          <span className="label">
+            上课时同时录音备份
+            <div className="small muted">3 小时约 40MB，存在本机；离线和云端识别时一直有效</div>
+          </span>
           <input
             type="checkbox"
-            checked={s.audioBackupWithWebSpeech}
-            onChange={(e) => updateSettings({ audioBackupWithWebSpeech: e.target.checked })}
+            className="switch"
+            checked={s.audioBackup}
+            onChange={(e) => updateSettings({ audioBackup: e.target.checked })}
           />
-          <span>
-            联网识别时也录音备份
-            <br />
-            <span className="muted small">
-              iPhone 上录音和 Safari 语音识别会抢麦克风，可能导致识别突然不出字，所以默认关闭。
-            </span>
-          </span>
         </label>
-      )}
-
-      <h2>离线模型</h2>
-      <div className="card">
-        <p style={{ marginTop: 0 }}>
-          状态：{s.offlineReady ? <span className="chip green">已下载</span> : <span className="chip">未下载</span>}
-        </p>
-        <p className="muted small">
-          Whisper 语音识别 + Opus-MT 翻译，约 300MB，请用 Wi-Fi 下载。添加到主屏幕后打开，模型才会长期保留。离线翻译质量明显不如 Claude，只作没网时的备用。
-        </p>
-        {dl ? (
-          <>
-            <div className="progress">
-              <div style={{ width: `${Math.round(dl.overall * 100)}%` }} />
-            </div>
-            <p className="muted small">
-              总进度 {Math.round(dl.overall * 100)}% · 第 {dl.step + 1}/{dl.steps} 步：{dl.label}{" "}
-              {Math.round(dl.stepFraction * 100)}%
-              <br />
-              下载期间请保持页面打开、屏幕亮着。
-            </p>
-          </>
-        ) : (
-          <div className="row">
-            <button className="btn primary" onClick={download}>
-              {s.offlineReady ? "重新检查 / 更新" : "下载离线模型"}
-            </button>
-            {s.offlineReady && (
-              <button className="btn" onClick={() => updateSettings({ offlineReady: false })}>
-                停用离线模型
-              </button>
-            )}
-          </div>
+        {s.audioBackup && (
+          <label className="cell">
+            <span className="label">
+              Safari 识别时也录音备份
+              <div className="small muted">iPhone 上录音和 Safari 语音识别会抢麦克风，可能导致识别突然不出字，所以默认关闭</div>
+            </span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={s.audioBackupWithWebSpeech}
+              onChange={(e) => updateSettings({ audioBackupWithWebSpeech: e.target.checked })}
+            />
+          </label>
         )}
-        {dlError && <div className="notice">{dlError}</div>}
       </div>
 
-      <h2>课程与术语表</h2>
+      <div className="group-title">离线模型</div>
+      <div className="group">
+        <div className="cell">
+          <span className="label">状态</span>
+          {s.offlineReady ? <span className="badge green">已下载</span> : <span className="badge amber">未下载</span>}
+        </div>
+        <div className="cell-block">
+          {dl ? (
+            <>
+              <div className="progress">
+                <div style={{ width: `${Math.round(dl.overall * 100)}%` }} />
+              </div>
+              <p className="muted small" style={{ marginBottom: 0 }}>
+                总进度 {Math.round(dl.overall * 100)}% · 第 {dl.step + 1}/{dl.steps} 步：{dl.label}{" "}
+                {Math.round(dl.stepFraction * 100)}%
+                <br />
+                下载期间请保持页面打开、屏幕亮着。
+              </p>
+            </>
+          ) : (
+            <div className="row">
+              <button className="btn primary" onClick={download}>
+                {s.offlineReady ? "重新检查 / 更新" : "下载离线模型"}
+              </button>
+              {s.offlineReady && (
+                <button className="btn danger" onClick={() => updateSettings({ offlineReady: false })}>
+                  停用离线模型
+                </button>
+              )}
+            </div>
+          )}
+          {dlError && (
+            <div className="notice" style={{ marginBottom: 0 }}>
+              <span className="notice-body">{dlError}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="group-foot">
+        Whisper 语音识别 + Opus-MT 翻译，约 300MB，请用 Wi-Fi 下载。添加到主屏幕后打开，模型才会长期保留。离线翻译质量明显不如 Claude，只作没网时的备用。
+      </div>
+
+      <div className="group-title">课程与术语表</div>
       <Courses />
 
-      <h2>使用说明</h2>
-      <div className="card small">
+      <div className="group-title">使用说明</div>
+      <div className="card small" style={{ lineHeight: 1.6 }}>
         <ol style={{ margin: 0, paddingLeft: 20 }}>
           <li>在 iPhone 的 Safari 里点"分享"→"添加到主屏幕"，之后从主屏幕图标打开。</li>
           <li>第一次开始识别时允许使用麦克风和语音识别。</li>
@@ -210,7 +225,7 @@ export function SettingsPage() {
         </ol>
       </div>
 
-      <h2>诊断日志</h2>
+      <div className="group-title">诊断日志</div>
       <DiagPanel />
     </div>
   );
@@ -236,26 +251,32 @@ function RecognizerSettings() {
   ];
   return (
     <div>
-      {options.map((o) => (
-        <button
-          key={o.id}
-          className={`model-card${s.liveRecognizer === o.id ? " on" : ""}`}
-          onClick={() => updateSettings({ liveRecognizer: o.id })}
-        >
-          <div className="name">
-            {s.liveRecognizer === o.id ? "◉" : "○"} {o.name}
-            {o.id === "cloud" && <span className="tag">坐得远推荐</span>}
-          </div>
-          <div className="desc">{o.desc}</div>
-          <div className="cost muted">
-            <span>
-              <b>{o.cost}</b>
-            </span>
-          </div>
-        </button>
-      ))}
+      <div className="model-list">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            className={`model-card${s.liveRecognizer === o.id ? " on" : ""}`}
+            onClick={() => updateSettings({ liveRecognizer: o.id })}
+            aria-pressed={s.liveRecognizer === o.id}
+          >
+            <div className="body">
+              <div className="name">
+                {o.name}
+                {o.id === "cloud" && <span className="tag">坐得远推荐</span>}
+              </div>
+              <div className="desc">{o.desc}</div>
+              <div className="cost">
+                <span>
+                  <b>{o.cost}</b>
+                </span>
+              </div>
+            </div>
+            <span className="mark">{s.liveRecognizer === o.id && <Icon name="check" size={22} />}</span>
+          </button>
+        ))}
+      </div>
       {s.liveRecognizer === "cloud" && (
-        <div className="card">
+        <div className="card" style={{ marginTop: 12 }}>
           <label className="field">
             <span>OpenAI API Key（只用于云端识别，只保存在这台手机上）</span>
             <div className="row" style={{ flexWrap: "nowrap" }}>
@@ -269,7 +290,7 @@ function RecognizerSettings() {
                   setTest("");
                 }}
               />
-              <button className="btn" onClick={() => setShowKey((v) => !v)}>
+              <button className="btn plain" onClick={() => setShowKey((v) => !v)}>
                 {showKey ? "隐藏" : "显示"}
               </button>
             </div>
@@ -296,11 +317,15 @@ function RecognizerSettings() {
             </a>{" "}
             注册并创建 Key，在 Billing 里充值（5 美元可以用十几节 3 小时的课）。没填 Key、没网或云端出错时，会自动改用 Safari 识别或离线识别。
           </p>
-          {!s.openaiKey && <div className="notice" style={{ marginBottom: 0 }}>还没填 OpenAI Key，上课时会继续用 Safari 自带识别。</div>}
+          {!s.openaiKey && (
+            <div className="notice" style={{ marginBottom: 0 }}>
+              <span className="notice-body">还没填 OpenAI Key，上课时会继续用 Safari 自带识别。</span>
+            </div>
+          )}
         </div>
       )}
-      <p className="muted small">
-        想收得更远更清楚，效果最明显的是外接<b>夹领麦克风</b>：无线领夹麦（夹在老师衣领上或放在讲台上）或有线的 Lightning / USB-C
+      <p className="group-foot">
+        🎙️ 想收得更远更清楚，效果最明显的是外接<b>夹领麦克风</b>：无线领夹麦（夹在老师衣领上或放在讲台上）或有线的 Lightning / USB-C
         夹麦，插上后 iPhone 会自动使用，两种识别方式都会变好。
       </p>
     </div>
@@ -317,7 +342,7 @@ function DiagPanel() {
         记录识别启动、中断、自动恢复等事件，只保存在这台手机上。转写出问题时，复制日志发给开发者帮助定位。
       </p>
       <div className="row">
-        <button className="btn" onClick={() => setOpen((v) => !v)}>
+        <button className="btn gray" onClick={() => setOpen((v) => !v)}>
           {open ? "收起" : "查看日志"}
         </button>
         <button
@@ -385,7 +410,7 @@ function Courses() {
           >
             保存
           </button>
-          <button className="btn" onClick={() => setEditing(null)}>
+          <button className="btn gray" onClick={() => setEditing(null)}>
             取消
           </button>
           <span className="spacer" />
@@ -405,28 +430,44 @@ function Courses() {
   }
 
   return (
-    <div>
+    <div className="group">
+      {courses.length === 0 && (
+        <div className="cell-block">
+          <Empty emoji="📖" title="还没有课程" desc="为每门课建一个术语表，例如 basso continuo = 通奏低音，上课时专业词汇的译法会保持统一。" />
+        </div>
+      )}
       {courses.map((c) => (
         <button
           key={c.id}
-          className="card session-item"
+          className="cell session-item"
           onClick={() => {
             setEditing(c);
             setText(glossaryToText(c.glossary));
           }}
         >
-          <strong>{c.name}</strong>
-          <span className="muted small"> · {c.glossary.length} 个术语 ›</span>
+          <span className="tile blue">📖</span>
+          <span className="label">
+            <div className="title">{c.name}</div>
+            <div className="sub">{c.glossary.length} 个术语</div>
+          </span>
+          <span className="chev">
+            <Icon name="chevron" size={16} />
+          </span>
         </button>
       ))}
       <button
-        className="btn block"
+        className="cell"
         onClick={() => {
           setEditing({ id: newId(), name: "", glossary: [] });
           setText("");
         }}
       >
-        + 新建课程
+        <span className="label" style={{ color: "var(--accent)" }}>
+          新建课程
+        </span>
+        <span className="chev" style={{ color: "var(--accent)" }}>
+          <Icon name="plus" size={18} />
+        </span>
       </button>
     </div>
   );

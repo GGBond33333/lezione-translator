@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import {
   estimateConversation,
   estimateLivePerHour,
@@ -49,6 +50,7 @@ export function ModelPicker(props: LiveProps | ConversationProps | RefineProps) 
 
   return (
     <div>
+      <div className="model-list">
       {ids.map((id) => {
         const on = props.value === id;
         const info = id === "offline" ? OFFLINE_INFO : MODELS[id];
@@ -56,13 +58,14 @@ export function ModelPicker(props: LiveProps | ConversationProps | RefineProps) 
           id !== "offline" && (MODELS[id].recommendedFor === props.kind || (props.kind === "conversation" && id === "claude-haiku-5-5"));
         const desc = props.kind === "conversation" ? CONVERSATION_HINTS[id] : info.strengths;
         return (
-          <button key={id} className={`model-card${on ? " on" : ""}`} onClick={() => pick(id)}>
+          <button key={id} className={`model-card${on ? " on" : ""}`} onClick={() => pick(id)} aria-pressed={on}>
+            <div className="body">
             <div className="name">
-              {on ? "◉" : "○"} {info.name}
+              {info.name}
               {recommended && <span className="tag">{TAG[props.kind]}</span>}
             </div>
             <div className="desc">{desc}</div>
-            <div className="cost muted">
+            <div className="cost">
               {props.kind === "live" && (
                 <>
                   <span>
@@ -93,10 +96,13 @@ export function ModelPicker(props: LiveProps | ConversationProps | RefineProps) 
                 </>
               )}
             </div>
+            </div>
+            <span className="mark">{on && <Icon name="check" size={22} />}</span>
           </button>
         );
       })}
-      <p className="muted small">
+      </div>
+      <p className="model-note">
         {props.kind === "conversation"
           ? "费用为预估值，已包含翻译时参考的前文聊天记录；去一次办事处大约说 50–100 句。"
           : "费用为预估值，按每小时约 600 句计算；实际花费以每节课显示的为准。"}
@@ -110,7 +116,7 @@ export function Sheet({ children, onClose }: { children: React.ReactNode; onClos
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         {children}
-        <button className="btn block" onClick={onClose}>
+        <button className="btn primary big block" onClick={onClose}>
           完成
         </button>
       </div>

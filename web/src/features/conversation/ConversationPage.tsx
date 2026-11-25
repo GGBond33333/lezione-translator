@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Dots, Icon } from "../../components/Icon";
 import { ModelPicker, Sheet } from "../../components/ModelPicker";
 import { describeApiError } from "../../core/claudeTranslator";
 import { speak, unlockSpeech } from "../../core/device";
@@ -25,9 +26,9 @@ interface Msg extends ConversationTurn {
 }
 
 const TEXT = {
-  zh: { hold: "🇨🇳 按住说中文", release: "松开结束", empty: "按住下面的按钮说中文，松开后翻译成意大利语", busy: "翻译中…" },
+  zh: { hold: "按住说中文", release: "松开结束", empty: "按住下面的按钮说中文，松开后翻译成意大利语", busy: "翻译中…" },
   it: {
-    hold: "🇮🇹 Tieni premuto e parla",
+    hold: "Tieni premuto e parla",
     release: "Rilascia per tradurre",
     empty: "Tieni premuto il pulsante e parla in italiano: tradurrò in cinese",
     busy: "Traduzione…",
@@ -218,9 +219,14 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
     const shown = msgs.filter((m) => mine.includes(m) || theirs.includes(m));
     const isTop = lang === "it";
     return (
-      <div className={`half${isTop ? " top" : ""}${isTop && !faceToFace ? " flat" : ""}`}>
+      <div className={`half ${lang}${isTop ? " top" : ""}${isTop && !faceToFace ? " flat" : ""}`}>
         <div className="msgs">
-          {shown.length === 0 && <div className="muted">{t.empty}</div>}
+          {shown.length === 0 && (
+            <div className="hint">
+              <div style={{ fontSize: 34, marginBottom: 6 }}>{lang === "it" ? "🇮🇹" : "🇨🇳"}</div>
+              {t.empty}
+            </div>
+          )}
           {shown.map((m) =>
             m.from === lang ? (
               <div key={m.id} className="bubble mine">
@@ -234,7 +240,17 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
             ),
           )}
         </div>
-        <div className="live">{talking === lang ? live || "…" : busy && !talking ? t.busy : ""}</div>
+        <div className="live">
+          {talking === lang ? (
+            live || <Dots />
+          ) : busy && !talking ? (
+            <>
+              <Dots /> {t.busy}
+            </>
+          ) : (
+            ""
+          )}
+        </div>
         <button
           className={`talk ${lang}${talking === lang ? " active" : ""}`}
           disabled={busy || (talking !== null && talking !== lang)}
@@ -246,6 +262,7 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
           onPointerCancel={() => void up()}
           onContextMenu={(e) => e.preventDefault()}
         >
+          <Icon name="mic" filled={talking === lang} />
           {talking === lang ? t.release : t.hold}
         </button>
       </div>
@@ -257,25 +274,24 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
   return (
     <div className="convo" style={{ paddingTop: "env(safe-area-inset-top)" }}>
       {half("it")}
-      <div className="row" style={{ padding: "6px 16px", background: "#0b1222", gap: 6 }}>
+      <div className="convo-bar">
         <button className="chip blue" onClick={() => setSheet("model")}>
           {model === "offline" ? "离线" : MODELS[model].name.replace("Claude ", "")}
         </button>
         <button className="chip" onClick={openRecord}>
-          📜 记录{msgs.length ? ` ${msgs.length}` : ""}
+          记录{msgs.length ? ` ${msgs.length}` : ""}
         </button>
         <button className="chip" onClick={() => setFaceToFace((v) => !v)}>
           {faceToFace ? "面对面" : "同向"}
         </button>
         <span className="chip">{formatUsd(cost)}</span>
-        <span className="spacer" />
-        <button className="chip" onClick={startNew}>
-          新对话
+        <button className="chip blue" style={{ marginLeft: "auto" }} onClick={startNew}>
+          <Icon name="plus" size={14} /> 新对话
         </button>
       </div>
       {notice && (
-        <div className="notice" style={{ margin: "0 16px" }}>
-          {notice}
+        <div className="notice convo-notice">
+          <span className="notice-body">{notice}</span>
         </div>
       )}
       {half("zh")}
@@ -293,14 +309,14 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
           {msgs.length === 0 ? (
             <p className="muted">还没有内容。</p>
           ) : (
-            <div className="card" style={{ maxHeight: "40vh", overflowY: "auto" }}>
+            <div className="card" style={{ maxHeight: "40vh", overflowY: "auto", padding: "4px 16px" }}>
               {msgs.map((m) => (
-                <div key={m.id} style={{ marginBottom: 10 }}>
-                  <div className="small muted">
+                <div key={m.id} className="record-item">
+                  <div className="who">
                     {m.from === "zh" ? "🇨🇳 我" : "🇮🇹 对方"} · {time(m.at)}
                   </div>
                   <div>{m.source}</div>
-                  <div style={{ color: "#38bdf8" }}>{m.translation || "（翻译失败）"}</div>
+                  <div className="tr">{m.translation || "（翻译失败）"}</div>
                 </div>
               ))}
             </div>
@@ -312,19 +328,24 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
 
           <h2>以前的对话</h2>
           {past.length === 0 && <p className="muted small">没有其他对话记录。</p>}
-          {past.map((s) => (
-            <div key={s.id} className="card row" style={{ flexWrap: "nowrap" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div>{s.title}</div>
-                <div className="small muted">
-                  最后：{new Date(s.endedAt ?? s.startedAt).toLocaleString("zh-CN")} · {formatUsd(s.costUsd)}
+          {past.length > 0 && (
+            <div className="group">
+              {past.map((s) => (
+                <div key={s.id} className="cell">
+                  <span className="tile green">💬</span>
+                  <div className="label">
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
+                    <div className="small muted">
+                      {new Date(s.endedAt ?? s.startedAt).toLocaleString("zh-CN")} · {formatUsd(s.costUsd)}
+                    </div>
+                  </div>
+                  <button className="btn" style={{ minHeight: 34, padding: "6px 14px" }} onClick={() => resume(s.id)}>
+                    继续
+                  </button>
                 </div>
-              </div>
-              <button className="btn" onClick={() => resume(s.id)}>
-                继续
-              </button>
+              ))}
             </div>
-          ))}
+          )}
         </Sheet>
       )}
     </div>

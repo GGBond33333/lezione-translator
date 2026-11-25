@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Icon, type IconName } from "./components/Icon";
 import { isIOS, isStandalone } from "./core/device";
 import { updateSettings, useSettings } from "./core/settings";
 import { ConversationPage } from "./features/conversation/ConversationPage";
@@ -8,11 +9,11 @@ import { TranscribePage } from "./features/transcribe/TranscribePage";
 
 type Tab = "transcribe" | "conversation" | "history" | "settings";
 
-const TABS: { id: Tab; label: string; ico: string }[] = [
-  { id: "transcribe", label: "课堂转写", ico: "🎓" },
-  { id: "conversation", label: "双语对话", ico: "💬" },
-  { id: "history", label: "历史", ico: "🗂️" },
-  { id: "settings", label: "设置", ico: "⚙️" },
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+  { id: "transcribe", label: "课堂转写", icon: "mic" },
+  { id: "conversation", label: "双语对话", icon: "chat" },
+  { id: "history", label: "历史", icon: "clock" },
+  { id: "settings", label: "设置", icon: "gear" },
 ];
 
 export function App() {
@@ -53,8 +54,8 @@ export function App() {
       {tab === "settings" && <SettingsPage />}
       <nav className="tabbar">
         {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>
-            <span className="ico">{t.ico}</span>
+          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)} aria-current={tab === t.id}>
+            <Icon name={t.icon} filled={tab === t.id} />
             {t.label}
           </button>
         ))}
@@ -68,8 +69,11 @@ function Onboarding({ onDone }: { onDone(goSettings: boolean): void }) {
   return (
     <div className="sheet-backdrop">
       <div className="sheet">
-        <h1>欢迎使用意中课堂翻译</h1>
-        <ol style={{ paddingLeft: 20 }}>
+        <div className="empty" style={{ padding: "8px 0 0" }}>
+          <div className="emoji">🇮🇹🇨🇳</div>
+        </div>
+        <h1 style={{ textAlign: "center", fontSize: 26 }}>欢迎使用意中课堂翻译</h1>
+        <ol className="card" style={{ paddingLeft: 36, lineHeight: 1.55, fontSize: 15 }}>
           {needInstall && (
             <li>
               <b>添加到主屏幕</b>：点 Safari 底部的"分享"按钮 →"添加到主屏幕"，之后从主屏幕图标打开，用起来和 App 一样。
@@ -84,11 +88,11 @@ function Onboarding({ onDone }: { onDone(goSettings: boolean): void }) {
           </li>
           <li>第一次开始识别时，请允许使用麦克风和语音识别。</li>
         </ol>
-        <div className="row">
-          <button className="btn primary" style={{ flex: 1 }} onClick={() => onDone(true)}>
+        <div className="row" style={{ flexWrap: "nowrap" }}>
+          <button className="btn primary big" style={{ flex: 1 }} onClick={() => onDone(true)}>
             去设置
           </button>
-          <button className="btn" style={{ flex: 1 }} onClick={() => onDone(false)}>
+          <button className="btn gray big" style={{ flex: 1 }} onClick={() => onDone(false)}>
             先看看
           </button>
         </div>
