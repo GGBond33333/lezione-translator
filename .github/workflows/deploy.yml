@@ -27,7 +27,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      # onnxruntime-node 是离线模型库在 Node 里用的，网页用不到；跳过它的 GPU 版下载（下载地址失效会导致安装失败）
+      - run: npm ci --onnxruntime-node-install-cuda=skip
       - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5
