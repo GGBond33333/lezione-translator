@@ -2,13 +2,39 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModelPicker, Sheet } from "../../components/ModelPicker";
 import { LANGS, type Lang } from "../../core/languages";
 import { estimateLivePerHour, formatUsd, MODELS, OFFLINE_INFO } from "../../core/models-catalog";
+import { ASR_USD_PER_HOUR } from "../../core/openaiAsr";
 import { useOnline } from "../../core/network";
 import { updateSettings, useSettings } from "../../core/settings";
 import { findUnfinishedLecture, listCourses, newId, saveCourse, type Course, type Session } from "../../storage/db";
 import { useLecture } from "./useLecture";
 
 const VISIBLE = 300;
-const STATUS_LABEL ={ idle: "未开始", listening: "识别中", reconnecting: "重连中", processing: "离线识别中" } as const;
+const STATUS_LABEL = { idle: "未开始", listening: "收音中", reconnecting: "重连中", processing: "识别中" } as const;
+const KIND_LABEL = { webspeech: "Safari 识别", whisper: "离线识别", cloud: "云端远场识别" } as const;
+
+/** 实时音量条：-60 dB 到 -10 dB 映射为 0–100%；最近 15 秒都很弱时提示靠近或外接麦克风 */
+function LevelMeter({ level }: { level: number }) {
+  const peaks = useRef<{ at: number; v: number }[]>([]);
+  const now = Date.now();
+  peaks.current.push({ at: now, v: level });
+  peaks.current = peaks.current.filter((p) => now - p.at < 15_000);
+  const loudest = Math.max(...peaks.current.map((p) => p.v));
+  const startedLongAgo = now - peaks.current[0].at > 10_000;
+  const db = 20 * Math.log10(Math.max(level, 1e-6));
+  const pct = Math.min(100, Math.max(0, ((db + 60) / 50) * 100));
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="meter" aria-label="收音音量">
+        <div style={{ width: `${pct}%` }} />
+      </div>
+      {startedLongAgo && loudest < 0.003 && (
+        <p className="muted small" style={{ margin: "4px 0 0" }}>
+          收音很弱：老师说话时音量条几乎不动。请把手机往讲台方向放、离近一点，或外接夹领麦克风。
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): void }) {
   const lec = useLecture();
@@ -104,6 +130,13 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
             <button className="btn block" style={{ textAlign: "left" }} onClick={() => setPicker(true)}>
               {modelName} · 每小时约 {formatUsd(estimateLivePerHour(settings.liveModel))} ›
             </button>
+            <span className="muted small">
+              语音识别：
+              {settings.liveRecognizer === "cloud" && settings.openaiKey
+                ? `云端远场识别，每小时约 ${formatUsd(ASR_USD_PER_HOUR)}`
+                : "Safari 自带（免费）"}
+              ，可在"设置 → 语音识别"里更换
+            </span>
           </div>
           <p className="muted small">
             长课建议：把手机插上充电宝，开始后可以打开"省电黑屏"。课后在"历史"里点"课后精修"，用 Sonnet 生成准确的全文译文和课堂笔记。
@@ -133,7 +166,9 @@ export function TranscribePage({ onOpenHistory }: { onOpenHistory(id: string): v
             <span className="chip">本节 {formatUsd(lec.session.costUsd)}</span>
             <span className="chip">{elapsed} 分钟</span>
             {lec.pendingCount > 0 && <span className="chip amber">待翻译 {lec.pendingCount}</span>}
+            {lec.recKind && lec.state === "running" && <span className="chip">{KIND_LABEL[lec.recKind]}</span>}
           </div>
+          {lec.level !== null && lec.state === "running" && <LevelMeter level={lec.level} />}
           {lec.notice && <div className="notice">{lec.notice}</div>}
           {lec.stalled && lec.state === "running" && (
             <button className="btn primary big block" style={{ marginTop: 8 }} onClick={() => void lec.restartManually()}>

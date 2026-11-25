@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ModelPicker } from "../../components/ModelPicker";
 import { clearDiag, formatDiag } from "../../core/diagLog";
 import { loadOfflineModels, type DownloadProgress } from "../../core/mlClient";
+import { formatUsd } from "../../core/models-catalog";
+import { ASR_NAME, ASR_USD_PER_HOUR, testOpenAIKey } from "../../core/openaiAsr";
 import { updateSettings, useSettings, type NetMode } from "../../core/settings";
 import { deleteCourse, listCourses, newId, saveCourse, type Course } from "../../storage/db";
 import type { GlossaryEntry } from "../../core/translator";
@@ -66,6 +68,9 @@ export function SettingsPage() {
         </div>
       </div>
 
+      <h2>语音识别（收音）</h2>
+      <RecognizerSettings />
+
       <h2>联网 / 离线</h2>
       <div className="seg">
         {(
@@ -115,7 +120,7 @@ export function SettingsPage() {
       <h2>费用上限</h2>
       <div className="card">
         <label className="field">
-          <span>单节课实时翻译最多花费（美元，0 = 不限）</span>
+          <span>单节课实时翻译 + 云端识别最多花费（美元，0 = 不限）</span>
           <input
             type="number"
             inputMode="decimal"
@@ -126,7 +131,7 @@ export function SettingsPage() {
           />
         </label>
         <p className="muted small" style={{ margin: 0 }}>
-          超过后自动切换到 Haiku；已经是 Haiku 的话切换到离线模型（没下载离线模型则暂停翻译，只记录原文）。
+          超过后云端识别改回免费的 Safari 识别，翻译自动切换到 Haiku；已经是 Haiku 的话切换到离线模型（没下载离线模型则暂停翻译，只记录原文）。
         </p>
       </div>
 
@@ -207,6 +212,97 @@ export function SettingsPage() {
 
       <h2>诊断日志</h2>
       <DiagPanel />
+    </div>
+  );
+}
+
+function RecognizerSettings() {
+  const s = useSettings();
+  const [showKey, setShowKey] = useState(false);
+  const [test, setTest] = useState<"" | "testing" | "ok" | "invalid" | "network">("");
+  const options = [
+    {
+      id: "safari" as const,
+      name: "Safari 自带识别",
+      desc: "免费；适合坐在前排、离老师近。离得远时容易收不清，网页没法调整它的收音。",
+      cost: "免费",
+    },
+    {
+      id: "cloud" as const,
+      name: "云端远场识别",
+      desc: `关掉 iPhone 的通话降噪、自动放大远处的声音，再交给 ${ASR_NAME} 识别；坐得远也能听清，会用课程术语表帮助认出人名和作品名。`,
+      cost: `每小时约 ${formatUsd(ASR_USD_PER_HOUR)}，3 小时课约 ${formatUsd(ASR_USD_PER_HOUR * 3)}`,
+    },
+  ];
+  return (
+    <div>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          className={`model-card${s.liveRecognizer === o.id ? " on" : ""}`}
+          onClick={() => updateSettings({ liveRecognizer: o.id })}
+        >
+          <div className="name">
+            {s.liveRecognizer === o.id ? "◉" : "○"} {o.name}
+            {o.id === "cloud" && <span className="tag">坐得远推荐</span>}
+          </div>
+          <div className="desc">{o.desc}</div>
+          <div className="cost muted">
+            <span>
+              <b>{o.cost}</b>
+            </span>
+          </div>
+        </button>
+      ))}
+      {s.liveRecognizer === "cloud" && (
+        <div className="card">
+          <label className="field">
+            <span>OpenAI API Key（只用于云端识别，只保存在这台手机上）</span>
+            <div className="row" style={{ flexWrap: "nowrap" }}>
+              <input
+                type={showKey ? "text" : "password"}
+                autoComplete="off"
+                placeholder="sk-..."
+                value={s.openaiKey}
+                onChange={(e) => {
+                  updateSettings({ openaiKey: e.target.value.trim() });
+                  setTest("");
+                }}
+              />
+              <button className="btn" onClick={() => setShowKey((v) => !v)}>
+                {showKey ? "隐藏" : "显示"}
+              </button>
+            </div>
+          </label>
+          <div className="row">
+            <button
+              className="btn"
+              disabled={!s.openaiKey || test === "testing"}
+              onClick={async () => {
+                setTest("testing");
+                setTest(await testOpenAIKey(s.openaiKey));
+              }}
+            >
+              {test === "testing" ? "测试中…" : "测试 Key"}
+            </button>
+            {test === "ok" && <span className="chip green">Key 可用</span>}
+            {test === "invalid" && <span className="chip amber">Key 无效</span>}
+            {test === "network" && <span className="chip amber">连不上 OpenAI，请检查网络</span>}
+          </div>
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            在{" "}
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
+              platform.openai.com/api-keys
+            </a>{" "}
+            注册并创建 Key，在 Billing 里充值（5 美元可以用十几节 3 小时的课）。没填 Key、没网或云端出错时，会自动改用 Safari 识别或离线识别。
+          </p>
+          {!s.openaiKey && <div className="notice" style={{ marginBottom: 0 }}>还没填 OpenAI Key，上课时会继续用 Safari 自带识别。</div>}
+        </div>
+      )}
+      <p className="muted small">
+        想收得更远更清楚，效果最明显的是外接<b>夹领麦克风</b>：无线领夹麦（夹在老师衣领上或放在讲台上）或有线的 Lightning / USB-C
+        夹麦，插上后 iPhone 会自动使用，两种识别方式都会变好。
+      </p>
     </div>
   );
 }

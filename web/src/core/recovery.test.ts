@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearDiag, DIAG_MAX, diag, getDiag } from "./diagLog";
 import { END_TIMEOUT_MS, looksReplaced, WATCHDOG_MS, WebSpeechRecognizer } from "./webSpeechRecognizer";
-import { SegmentQueue } from "./whisperRecognizer";
+import { SegmentQueue } from "./segmentRecognizer";
 
 /** 模拟 Safari 的语音识别；silentEnd = true 时 abort/stop 后不触发 onend（Safari 偶尔会这样） */
 class FakeRec {
@@ -112,7 +112,7 @@ describe("离线识别积压上限", () => {
             resolve();
           }),
         ),
-      2,
+      { maxBacklog: 2 },
     );
     expect(q.push(1)).toBe(true);
     expect(q.push(2)).toBe(true);

@@ -232,6 +232,8 @@ textarea { min-height: 120px; resize: vertical; }
 .notes { white-space: pre-wrap; font-size: 15px; }
 .progress { height: 8px; background: #0b1222; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
 .progress > div { height: 100%; background: var(--accent); transition: width 0.3s; }
+.meter { height: 6px; background: #0b1222; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+.meter > div { height: 100%; background: linear-gradient(90deg, #22c55e, #84cc16 70%, #f59e0b); transition: width 0.12s; }
 audio { width: 100%; margin-top: 8px; }
 .check { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
 .check input { width: 20px; height: 20px; }

@@ -14,6 +14,10 @@ export interface Settings {
   conversationRetentionDays: number;
   /** 单节课费用上限（美元），0 表示不限 */
   costCapUsd: number;
+  /** 课堂转写的语音识别：Safari 自带（免费、适合近距离）或云端远场识别（OpenAI） */
+  liveRecognizer: "safari" | "cloud";
+  /** OpenAI API Key，只用于云端识别，只保存在本机 */
+  openaiKey: string;
   audioBackup: boolean;
   /** 联网识别（Safari 语音识别）时也同时录音备份；iPhone 上两者抢麦克风，可能让识别中断，默认关闭 */
   audioBackupWithWebSpeech: boolean;
@@ -29,6 +33,8 @@ export const DEFAULT_SETTINGS: Settings = {
   conversationModel: "claude-haiku-5-5",
   conversationRetentionDays: 30,
   costCapUsd: 3,
+  liveRecognizer: "safari",
+  openaiKey: "",
   audioBackup: true,
   audioBackupWithWebSpeech: false,
   offlineReady: false,

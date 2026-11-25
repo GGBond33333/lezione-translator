@@ -19,7 +19,21 @@ export type TranslatorRoute =
   | { engine: "offline" }
   | { engine: "none"; reason: string };
 
-export type RecognizerRoute = { engine: "webspeech" } | { engine: "whisper" } | { engine: "none"; reason: string };
+export type RecognizerRoute =
+  | { engine: "webspeech" }
+  | { engine: "whisper" }
+  | { engine: "cloud" }
+  | { engine: "none"; reason: string };
+
+export interface RecognizerRouteInput extends Pick<RouteInput, "mode" | "online" | "offlineReady" | "webSpeech"> {
+  /** 课堂转写才用云端远场识别；双语对话保持原来的识别方式 */
+  purpose?: "lecture" | "conversation";
+  /** 设置里选了"云端远场识别" */
+  cloud?: boolean;
+  hasOpenaiKey?: boolean;
+  /** 本节课已超过费用上限：改回免费的 Safari 识别 */
+  overCap?: boolean;
+}
 
 /** 选择翻译引擎：联网优先，超出费用上限时先降到 Haiku，再降到离线 */
 export function chooseTranslator(i: RouteInput): TranslatorRoute {
@@ -37,8 +51,10 @@ export function chooseTranslator(i: RouteInput): TranslatorRoute {
   return offline("已超过本节课的费用上限");
 }
 
-/** 选择识别引擎：Safari 自带识别需要联网，离线时用 Whisper */
-export function chooseRecognizer(i: Pick<RouteInput, "mode" | "online" | "offlineReady" | "webSpeech">): RecognizerRoute {
+/** 选择识别引擎：课堂可选云端远场识别；Safari 自带识别需要联网；离线时用 Whisper */
+export function chooseRecognizer(i: RecognizerRouteInput): RecognizerRoute {
+  if (i.purpose === "lecture" && i.cloud && i.hasOpenaiKey && i.online && i.mode !== "offline" && !i.overCap)
+    return { engine: "cloud" };
   const useWhisper = i.mode === "offline" || !i.online || !i.webSpeech;
   if (useWhisper) {
     if (i.offlineReady) return { engine: "whisper" };

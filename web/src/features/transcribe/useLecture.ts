@@ -36,6 +36,9 @@ export function useLecture() {
   const [pendingCount, setPendingCount] = useState(0);
   /** 自动恢复多次失败，需要用户点一下按钮才能重新拿到麦克风 */
   const [stalled, setStalled] = useState(false);
+  /** 实时音量（云端和离线识别时才有），用于音量条 */
+  const [level, setLevel] = useState<number | null>(null);
+  const [recKind, setRecKind] = useState<Recognizer["kind"] | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
   const courseRef = useRef<Course | undefined>(undefined);
@@ -48,6 +51,7 @@ export function useLecture() {
   stateRef.current = state;
   const recoveringRef = useRef(false);
   const recoverFailuresRef = useRef(0);
+  const switchEngineRef = useRef<(reason: string) => void>(() => undefined);
 
   const refresh = useCallback(() => {
     setItems([...itemsRef.current]);
@@ -100,12 +104,19 @@ export function useLecture() {
 
   const startListening = useCallback(async () => {
     const s = sessionRef.current!;
-    const rec = createRecognizer(15);
+    const rec = createRecognizer({
+      purpose: "lecture",
+      spentUsd: s.costUsd,
+      courseName: courseRef.current?.name,
+      keywords: courseRef.current?.glossary.map((g) => g.source),
+    });
     if (typeof rec === "string") {
       setNotice(rec);
       return false;
     }
     recRef.current = rec;
+    setRecKind(rec.kind);
+    setLevel(null);
     try {
       await rec.start(s.sourceLang, {
         onPartial: setPartial,
@@ -125,6 +136,14 @@ export function useLecture() {
         },
         onStatus: setStatus,
         onError: setNotice,
+        onLevel: setLevel,
+        onCost: (usd) => {
+          const before = sessionRef.current?.costUsd ?? 0;
+          persistSession({ costUsd: before + usd });
+          const cap = getSettings().costCapUsd;
+          if (cap > 0 && before < cap && before + usd >= cap)
+            setTimeout(() => switchEngineRef.current("已超过本节课的费用上限，改用免费的 Safari 识别"), 0);
+        },
       });
     } catch (e) {
       setNotice(e instanceof Error ? e.message : String(e));
@@ -134,10 +153,10 @@ export function useLecture() {
 
     // iPhone 上 Safari 语音识别和录音备份会抢麦克风，联网识别时默认不同时录音
     const settings = getSettings();
-    if (settings.audioBackup && (rec.kind === "whisper" || settings.audioBackupWithWebSpeech)) {
+    if (settings.audioBackup && (rec.kind !== "webspeech" || settings.audioBackupWithWebSpeech)) {
       const b = new AudioBackup();
       try {
-        if (await b.start(s.id)) {
+        if (await b.start(s.id, "far")) {
           backupRef.current = b;
           if (!s.audioMime) persistSession({ audioMime: b.mime });
         }
@@ -275,6 +294,17 @@ export function useLecture() {
     else setState("paused");
   }, [startListening, stopListening]);
 
+  // 超过费用上限时从云端识别切回 Safari 识别（路由会根据已花费自动选择）
+  switchEngineRef.current = (reason: string) => {
+    if (stateRef.current !== "running" || recRef.current?.kind !== "cloud") return;
+    diag(`课堂转写：切换识别方式（${reason}）`);
+    void (async () => {
+      await stopListening();
+      setNotice(reason);
+      if (!(await startListening())) setState("paused");
+    })();
+  };
+
   const pause = useCallback(async () => {
     await stopListening();
     await queueRef.current?.flush();
@@ -325,6 +355,8 @@ export function useLecture() {
     notice,
     pendingCount,
     stalled,
+    level,
+    recKind,
     start,
     pause,
     resume,

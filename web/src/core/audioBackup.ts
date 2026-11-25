@@ -1,6 +1,6 @@
 import { countAudioChunks, saveAudioChunk } from "../storage/db";
 import { diag } from "./diagLog";
-import { acquireMic, releaseMic } from "./mic";
+import { acquireMic, releaseMic, type MicProfile } from "./mic";
 
 const CHUNK_MS = 60_000;
 
@@ -14,14 +14,17 @@ function pickMime(): string | undefined {
 export class AudioBackup {
   private recorder: MediaRecorder | null = null;
   private sessionId = "";
+  private profile: MicProfile = "far";
   private index = 0;
   private saving: Promise<void> = Promise.resolve();
   mime: string | undefined;
 
-  async start(sessionId: string): Promise<boolean> {
+  /** profile 要和同时在用的识别一致，共用同一个麦克风流（课堂默认远场） */
+  async start(sessionId: string, profile: MicProfile = "far"): Promise<boolean> {
     this.mime = pickMime();
     if (!this.mime) return false;
     this.sessionId = sessionId;
+    this.profile = profile;
     // 续录时接着之前的编号保存，同一节课的录音按顺序拼接
     this.index = await countAudioChunks(sessionId);
     await this.record();
@@ -29,7 +32,7 @@ export class AudioBackup {
   }
 
   private async record() {
-    const stream = await acquireMic();
+    const stream = await acquireMic(this.profile);
     const rec = new MediaRecorder(stream, { mimeType: this.mime, audioBitsPerSecond: 32_000 });
     const sessionId = this.sessionId;
     rec.ondataavailable = (e) => {

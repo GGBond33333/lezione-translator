@@ -104,7 +104,7 @@ export function ConversationPage({ resumeId, onResumed }: { resumeId: string | n
     if (talking || busy) return;
     unlockSpeech();
     setNotice("");
-    const rec = createRecognizer(0);
+    const rec = createRecognizer({ purpose: "conversation" });
     if (typeof rec === "string") {
       setNotice(rec);
       return;
